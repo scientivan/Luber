@@ -3,6 +3,7 @@ import { config, resolvePortfolio } from "../config.js";
 import { suiClient } from "../chain/suiClient.js";
 import { DEMO_POSITIONS } from "../services/mockData.js";
 import { deepbookClient } from "../services/deepbookClient.js";
+import { Network, TurbosSdk } from "turbos-clmm-sdk";
 
 /**
  * Canonical token for correlation/pricing. ETH-family wrappers collapse to ETH so
@@ -15,6 +16,11 @@ export function canonicalToken(sym: string): string {
   if (s === "WBTC" || s === "TBTC" || s === "LBTC") return "BTC";
   return s;
 }
+
+const turbosSdk = new TurbosSdk(
+  config.sui.network === "mainnet" ? Network.mainnet : Network.testnet,
+  suiClient as any
+);
 
 /**
  * Scout â€” discovers all LP positions for a wallet as Sui on-chain objects,
@@ -81,7 +87,20 @@ export const scout = {
             if (tickLower !== 0 || tickUpper !== 0) {
               pos.inRange = currentTick >= tickLower && currentTick <= tickUpper;
             }
-          }        } else if (pos.protocol === "deepbook") {
+          }
+        } else if (pos.protocol === "turbos") {
+          try {
+            const pool = await turbosSdk.pool.getPool(pos.poolId);
+            const currentTick = Number((pool as any).tick_current_index?.fields?.bits || (pool as any).tickCurrentIndex || (pool as any).tick_current_index || 0);
+            const tickLower = (pos as any).tickLower ?? 0;
+            const tickUpper = (pos as any).tickUpper ?? 0;
+            if (tickLower !== 0 || tickUpper !== 0) {
+              pos.inRange = currentTick >= tickLower && currentTick <= tickUpper;
+            }
+          } catch (err) {
+            console.error(`[scout] failed to fetch Turbos pool ${pos.poolId}:`, err);
+          }
+        } else if (pos.protocol === "deepbook") {
           const dbData = await deepbookClient.getLiquidityProfile(pos.poolId, pos.tokenX, pos.tokenY);
           (pos as any).deepBookData = dbData;
           // For DeepBook, a very wide spread implies poor liquidity/unhealthy pool

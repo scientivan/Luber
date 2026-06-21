@@ -1,4 +1,4 @@
-﻿import { config } from "../config.js";
+import { config } from "../config.js";
 
 /**
  * Pyth price feed IDs for major tokens on Sui.

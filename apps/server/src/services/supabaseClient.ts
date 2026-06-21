@@ -1,4 +1,4 @@
-﻿import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 
 function buildClient(useServiceRole = false): SupabaseClient {

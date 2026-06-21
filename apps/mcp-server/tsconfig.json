@@ -1,4 +1,8 @@
 {
+<<<<<<< HEAD
+=======
+  "extends": "../../tsconfig.base.json",
+>>>>>>> 0dcf97bb1c550d9ca21b40be23247cc073569cdb
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -12,7 +16,9 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "skipLibCheck": true,
+    "esModuleInterop": true
   },
   "include": ["src"]
 }

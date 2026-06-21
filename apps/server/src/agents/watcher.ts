@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Autonomous Watcher — a separate 24/7 service (NOT the MCP server; MCP is
  * request/response and an LLM host is not a daemon). It holds the StrategistCap
  * (logically), polls price (Pyth live / simulate), and executes the

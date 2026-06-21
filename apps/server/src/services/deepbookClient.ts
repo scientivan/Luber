@@ -1,4 +1,4 @@
-﻿import type { DeepBookLiquidityProfile } from "@lp-guardian/core";
+import type { DeepBookLiquidityProfile } from "@lp-guardian/core";
 import { suiClient } from "../chain/suiClient.js";
 
 /**
@@ -21,8 +21,8 @@ export const deepbookClient = {
 
     try {
       const { DeepBookClient } = await import("@mysten/deepbook-v3");
-      const db = new DeepBookClient(suiClient);
-      const summary = await db.getBookSummary(poolId);
+      const db = new DeepBookClient({ client: suiClient, address: "0x0", env: "testnet" } as any);
+      const summary = (db as any).getBookSummary ? await (db as any).getBookSummary(poolId) : null;
       if (!summary) return fallback;
 
       const askPrice = Number(summary.bestAskPrice ?? 0);
