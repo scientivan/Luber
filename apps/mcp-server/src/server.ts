@@ -229,23 +229,16 @@ async function handleTool(name: string, args: Record<string, unknown>) {
       if (!poolId || !isValidSuiAddress(poolId)) {
         return errorResult("That doesn't look like a valid pool ID.");
       }
-      const data: any = await apiPost("/pool/diagnose", {
+      const data: any = await apiPost("/portfolio/pool-health", {
         walletAddress: addr,
         poolId,
       });
-      const ex = data.exitLiquidity || {};
       const text = [
         `Pool: ${data.pair} (${data.protocol})`,
         `Status: ${data.inRange ? "In range" : `Out of range for ${data.daysOutOfRange ?? "?"} days`}`,
-        `Value: $${Math.round(data.valueUSD).toLocaleString()}`,
-        `Impermanent loss: ~${data.ilEstimatePct}% (≈$${Math.round(data.ilEstimateUSD).toLocaleString()})`,
-        data.inCluster
-          ? `Cluster: contributes ${data.clusterContributionPct}% of your ${data.clusterToken} cluster.`
-          : `Cluster: not part of the dominant ${data.clusterToken} cluster.`,
-        ex.depthUSD != null
-          ? `Exit liquidity: DeepBook depth ~$${Math.round(ex.depthUSD).toLocaleString()}, ~${ex.slippageBps} bps slippage — ${ex.feasible ? "exit is feasible" : "thin, exit may slip"}.`
-          : "Exit liquidity: no DeepBook depth available.",
-        data.isDust ? "⚠ This is a dust position (gas > value)." : "",
+        `Estimated impermanent loss: $${Math.round(data.estImpermanentLossUSD ?? 0)}`,
+        `Contribution to dominant cluster: ${data.contributionToClusterPct ?? 0}%`,
+        `Exit depth: $${Math.round(data.exitLiquidity?.depthUSD ?? 0).toLocaleString()} (${data.exitLiquidity?.feasible ? "feasible" : "constrained"})`,
       ]
         .filter(Boolean)
         .join("\n");

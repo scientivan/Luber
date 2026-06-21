@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { isValidSuiAddress, normalizeSuiAddress } from "@mysten/sui/utils";
 
 export const config = {
   port: Number(process.env.PORT ?? 8787),
@@ -30,7 +31,13 @@ export const config = {
     privateKey: process.env.STRATEGIST_PRIVATE_KEY ?? "",
   },
 
-    watcher: {
+  auth: {
+    challengeTtlMs: Number(process.env.AUTH_CHALLENGE_TTL_MS ?? 5 * 60_000),
+    sessionTtlMs: Number(process.env.AUTH_SESSION_TTL_MS ?? 24 * 60 * 60_000),
+    rebalanceIntentTtlMs: Number(process.env.REBALANCE_INTENT_TTL_MS ?? 5 * 60_000),
+  },
+
+  watcher: {
     enabled: (process.env.WATCHER_ENABLED ?? "true") === "true",
     pollMs: Number(process.env.WATCHER_POLL_MS ?? 5000),
     thresholdPct: Number(process.env.WATCHER_THRESHOLD_PCT ?? -5), // default -5% drop triggers save
@@ -83,10 +90,33 @@ function walletPortfolioMap(): Record<string, string> {
   }
 }
 
+export function normalizeAddress(value: string): string {
+  if (!isValidSuiAddress(value)) throw new Error("Invalid Sui address");
+  return normalizeSuiAddress(value);
+}
+
+export function configuredDemoWallets(): Set<string> {
+  const wallets = new Set<string>();
+  for (const key of Object.keys(walletPortfolioMap())) {
+    try {
+      wallets.add(normalizeAddress(key));
+    } catch {
+      // Ignore malformed deployment config instead of authorizing it.
+    }
+  }
+  if (process.env.LPG_OWNER_ADDRESS) {
+    try {
+      wallets.add(normalizeAddress(process.env.LPG_OWNER_ADDRESS));
+    } catch {
+      // Invalid owner env is handled as no eligible wallet.
+    }
+  }
+  return wallets;
+}
+
 /**
  * Resolve which portfolio a request targets. Accepts: a portfolio id passed
- * directly (demo selector), an explicit wallet→portfolio mapping, then falls back
- * to the primary `LPG_PORTFOLIO_ID`. Returns `{ portfolioId, capId }`.
+ * directly (demo selector) or an explicit wallet→portfolio mapping.
  */
 export function resolvePortfolio(walletOrPortfolio: string): { portfolioId: string; capId: string } {
   const demos = Object.values(config.demos);
@@ -98,6 +128,26 @@ export function resolvePortfolio(walletOrPortfolio: string): { portfolioId: stri
     const d = demos.find((x) => x.portfolio === mapped);
     return { portfolioId: mapped, capId: d?.cap ?? "0x0" };
   }
-  const fallback = demos.find((d) => d.portfolio === config.sui.portfolioId);
-  return { portfolioId: config.sui.portfolioId, capId: fallback?.cap ?? "0x0" };
+  throw new Error("Wallet is not mapped to an LP Guardian demo portfolio");
+}
+
+export function resolveActionPortfolio(walletAddress: string): { portfolioId: string; capId: string } {
+  const wallet = normalizeAddress(walletAddress);
+  if (!configuredDemoWallets().has(wallet)) {
+    throw new Error("On-chain actions are available only for configured demo wallets");
+  }
+  const mapping = walletPortfolioMap();
+  const mappedKey = Object.keys(mapping).find((key) => {
+    try {
+      return normalizeAddress(key) === wallet;
+    } catch {
+      return false;
+    }
+  });
+  const portfolioId = mappedKey ? mapping[mappedKey] : config.sui.portfolioId;
+  const demo = Object.values(config.demos).find((item) => item.portfolio === portfolioId);
+  if (!portfolioId || portfolioId === "0x0" || !demo?.cap || demo.cap === "0x0") {
+    throw new Error("Demo wallet has no configured portfolio or StrategistCap");
+  }
+  return { portfolioId, capId: demo.cap };
 }

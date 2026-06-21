@@ -3,9 +3,12 @@ import { Landing } from "./pages/Landing.js";
 import { Docs } from "./pages/Docs.js";
 import { History } from "./pages/History.js";
 import { StatusHub } from "./pages/StatusHub.js";
-import { DiagnoseView } from "./pages/DiagnoseView.js";
-import { PoolView } from "./pages/PoolView.js";
-import { GuardView } from "./pages/GuardView.js";
+import {
+  GuardSetup,
+  PoolDiagnosis,
+  PortfolioDiagnosis,
+  RebalanceTerminal,
+} from "./pages/ProductFlows.js";
 
 export function App() {
   return (
@@ -16,9 +19,12 @@ export function App() {
       <Route path="/history/:walletAddress" element={<History />} />
       <Route path="/history" element={<History />} />
       <Route path="/status" element={<StatusHub />} />
-      <Route path="/d/:walletAddress" element={<DiagnoseView />} />
-      <Route path="/d/:walletAddress/pool/:poolId" element={<PoolView />} />
-      <Route path="/guard/:walletAddress" element={<GuardView />} />
+      <Route path="/d/:walletAddress" element={<PortfolioDiagnosis />} />
+      <Route path="/d/:walletAddress/pool/:poolId" element={<PoolDiagnosis />} />
+      <Route path="/diagnose" element={<PortfolioDiagnosis />} />
+      <Route path="/rebalance/:walletAddress" element={<RebalanceTerminal />} />
+      <Route path="/rebalance" element={<RebalanceTerminal />} />
+      <Route path="/guard/:walletAddress" element={<GuardSetup />} />
     </Routes>
   );
 }

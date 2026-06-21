@@ -127,7 +127,14 @@ export async function logEvent(
   walletAddress: string,
   portfolioId: string,
   eventType: string,
-  details?: Record<string, any>
+  details?: Record<string, any>,
+  metadata?: {
+    level?: "portfolio" | "pool";
+    poolId?: string;
+    summary?: string;
+    txDigest?: string;
+    moneySaved?: number;
+  }
 ): Promise<void> {
   const { error } = await supabase.admin
     .from("history_logs")
@@ -136,6 +143,11 @@ export async function logEvent(
       portfolio_id: portfolioId,
       event_type: eventType,
       details: details || {},
+      level: metadata?.level ?? "portfolio",
+      pool_id: metadata?.poolId,
+      summary: metadata?.summary,
+      tx_digest: metadata?.txDigest,
+      money_saved: metadata?.moneySaved,
     });
 
   if (error) console.error(`Failed to log event: ${error.message}`);
@@ -143,18 +155,43 @@ export async function logEvent(
 
 export async function getHistory(
   walletAddress: string,
-  limit: number = 50
+  limit: number = 50,
+  filter: "portfolio" | "pool" | "all" = "all"
 ): Promise<any[]> {
-  const { data, error } = await supabase.admin
+  let query = supabase.admin
     .from("history_logs")
     .select("*")
     .eq("wallet_address", walletAddress)
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (filter !== "all") query = query.eq("level", filter);
+  const { data, error } = await query;
 
   if (error) {
     console.error(`Failed to get history: ${error.message}`);
     return [];
   }
   return data || [];
+}
+
+export async function confirmGuard(
+  walletAddress: string,
+  portfolioId: string,
+  capId: string,
+  txDigest: string
+): Promise<void> {
+  const { error } = await supabase.admin.from("guarded_wallets").upsert({
+    wallet_address: walletAddress,
+    portfolio_id: portfolioId,
+    cap_id: capId,
+    guard_enabled: true,
+    authorization_tx_digest: txDigest,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(`Failed to confirm Guard: ${error.message}`);
+}
+
+export async function checkSupabase(): Promise<void> {
+  const { error } = await supabase.admin.from("history_logs").select("id").limit(1);
+  if (error) throw new Error(error.message);
 }

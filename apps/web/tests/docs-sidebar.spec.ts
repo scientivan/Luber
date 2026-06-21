@@ -3,9 +3,9 @@ import { expect, test } from "@playwright/test";
 test("docs sidebar tracks active section while scrolling", async ({ page }) => {
   await page.goto("/docs");
 
-  const gettingStartedLink = page.getByRole("link", { name: "Getting Started" });
-  const installationLink = page.getByRole("link", { name: "Installation" });
-  const securityLink = page.getByRole("link", { name: "Security Model" });
+  const gettingStartedLink = page.getByRole("link", { name: "Getting Started", exact: true });
+  const installationLink = page.getByRole("link", { name: "Installation", exact: true });
+  const securityLink = page.getByRole("link", { name: "Security Model", exact: true });
 
   await expect(page.getByRole("link", { name: "Introduction", exact: true })).toHaveAttribute("aria-current", "location");
 

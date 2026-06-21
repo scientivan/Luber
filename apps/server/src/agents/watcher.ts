@@ -23,6 +23,9 @@ class Watcher {
   private guarded = new Map<string, { capId: string; portfolioId: string; clusterToken?: string }>();
   private subscribers = new Set<Subscriber>();
   private timer?: NodeJS.Timeout;
+  private inFlight = new Set<string>();
+  private lastCheckAt?: string;
+  private lastError?: string;
 
   /** Arm Guard for a wallet. capId/portfolioId fall back to the resolved demo cap. */
   arm(walletAddress: string, capId?: string) {
@@ -61,11 +64,23 @@ class Watcher {
     this.timer = undefined;
   }
 
+  status() {
+    return {
+      enabled: config.watcher.enabled,
+      running: Boolean(this.timer),
+      guardedWallets: this.guarded.size,
+      lastCheckAt: this.lastCheckAt,
+      lastError: this.lastError,
+    };
+  }
+
   /** One poll. Checks Pyth for price drops and triggers autonomous saves. */
   private async tick() {
     if (this.guarded.size === 0) return;
 
     try {
+      this.lastCheckAt = new Date().toISOString();
+      this.lastError = undefined;
       // Lazily discover cluster tokens for newly armed wallets
       for (const [wallet, guard] of this.guarded) {
         if (!guard.clusterToken) {
@@ -122,6 +137,7 @@ class Watcher {
         await supabaseService.updateLastCheck(wallet).catch(() => {});
       }
     } catch (err) {
+      this.lastError = err instanceof Error ? err.message : String(err);
       console.error("[watcher] tick error:", err);
     }
   }
@@ -131,49 +147,57 @@ class Watcher {
    * "simulate shock" toggle. Drives beat 3 of the demo.
    */
   async fireShock(walletAddress: string, asset: string, pct: number): Promise<void> {
+    if (this.inFlight.has(walletAddress)) throw new Error("A watcher action is already running for this wallet");
     const guard = this.guarded.get(walletAddress);
     if (!guard) return;
+    this.inFlight.add(walletAddress);
 
-    const triggerEvent = { kind: "trigger" as const, asset, pct, text: `⚠️ ${asset} just dropped ${Math.abs(pct)}%. Your cluster is bleeding. Acting now.` };
-    this.emit(triggerEvent);
-    wsHandler.broadcast("threshold_breach", { walletAddress, ...triggerEvent });
+    try {
+      const triggerEvent = { kind: "trigger" as const, asset, pct, text: `⚠️ ${asset} just dropped ${Math.abs(pct)}%. Your cluster is bleeding. Acting now.` };
+      this.emit(triggerEvent);
+      wsHandler.broadcastWallet(walletAddress, "threshold_breach", { walletAddress, ...triggerEvent });
 
-    // Diagnose now to get the REAL cluster + allocation, then build a real plan.
-    const health = await strategist.diagnose(walletAddress);
-    const sim = await strategist.simulate(walletAddress, asset, pct);
-    const actingEvent = { kind: "acting" as const, text: "Rebalancing the correlated cluster via DeepBook…" };
-    this.emit(actingEvent);
-    wsHandler.broadcast("rebalance_start", { walletAddress, ...actingEvent });
+      // Diagnose now to get the REAL cluster + allocation, then build a real plan.
+      const health = await strategist.diagnose(walletAddress);
+      const sim = await strategist.simulate(walletAddress, asset, pct);
+      const actingEvent = { kind: "acting" as const, text: "Rebalancing the correlated cluster via DeepBook…" };
+      this.emit(actingEvent);
+      wsHandler.broadcastWallet(walletAddress, "rebalance_start", { walletAddress, ...actingEvent });
 
-    const plan = buildPlanFromAllocation(health);
-    const { txDigest, explorer } = await strategist.executeRebalance(guard.capId, guard.portfolioId, plan);
-    await strategist.mintReport(guard.capId, guard.portfolioId, { ...health, txDigest });
-    
-    // Log rebalance event to Supabase
-    await supabaseService.logEvent(walletAddress, guard.portfolioId, "rebalance", {
-      asset,
-      dropPct: pct,
-      txDigest,
-      moneySaved: sim.guarded.moneySaved
-    }).catch(console.error);
-    
-    // Auto-refresh baseline prices after successful rebalance
-    const uniqueTokens = Array.from(new Set((health.positions || []).map(p => p.token).filter(Boolean)));
-    if (uniqueTokens.length > 0) {
-      const newPrices = await pythClient.getCurrentPrices(uniqueTokens as string[]).catch(() => ({}));
-      await supabaseService.setBaselinePrices(walletAddress, guard.portfolioId, newPrices).catch(console.error);
+      const plan = buildPlanFromAllocation(health);
+      const { txDigest, explorer } = await strategist.executeRebalance(guard.capId, guard.portfolioId, plan);
+      await strategist.mintReport(guard.capId, guard.portfolioId, { ...health, txDigest });
+
+      await supabaseService.logEvent(walletAddress, guard.portfolioId, "rebalance", {
+        asset,
+        dropPct: pct,
+        txDigest,
+        moneySaved: sim.guarded.moneySaved,
+      }, {
+        summary: `Cut ${asset} exposure after ${Math.abs(pct).toFixed(2)}% shock`,
+        txDigest,
+        moneySaved: sim.guarded.moneySaved,
+      }).catch(console.error);
+
+      const uniqueTokens = Array.from(new Set((health.positions || []).map(p => p.token).filter(Boolean)));
+      if (uniqueTokens.length > 0) {
+        const newPrices = await pythClient.getCurrentPrices(uniqueTokens as string[]).catch(() => ({}));
+        await supabaseService.setBaselinePrices(walletAddress, guard.portfolioId, newPrices).catch(console.error);
+      }
+
+      const targetPct = health.suggestedAllocation?.allocations.find((a) => a.token === health.cluster.token)?.targetPct ?? 40;
+      const doneEvent = {
+        kind: "done" as const,
+        text: `✅ I cut your ${health.cluster.token} exposure from ${Math.round(health.cluster.exposurePct)}% to ${Math.round(targetPct)}% — into uncorrelated assets via DeepBook. I just saved you about $${Math.round(sim.guarded.moneySaved)} of that drop.`,
+        txDigest,
+        explorer,
+        moneySaved: sim.guarded.moneySaved,
+      };
+      this.emit(doneEvent);
+      wsHandler.broadcastWallet(walletAddress, "rebalance_complete", { walletAddress, ...doneEvent });
+    } finally {
+      this.inFlight.delete(walletAddress);
     }
-
-    const targetPct = health.suggestedAllocation?.allocations.find((a) => a.token === health.cluster.token)?.targetPct ?? 40;
-    const doneEvent = {
-      kind: "done" as const,
-      text: `✅ I cut your ${health.cluster.token} exposure from ${Math.round(health.cluster.exposurePct)}% to ${Math.round(targetPct)}% — into uncorrelated assets via DeepBook. I just saved you about $${Math.round(sim.guarded.moneySaved)} of that drop.`,
-      txDigest,
-      explorer,
-      moneySaved: sim.guarded.moneySaved,
-    };
-    this.emit(doneEvent);
-    wsHandler.broadcast("rebalance_complete", { walletAddress, ...doneEvent });
   }
 }
 

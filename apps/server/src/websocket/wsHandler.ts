@@ -44,11 +44,12 @@ class WebSocketHandler {
   /**
    * Broadcast message to all connected clients
    */
-  broadcast<T>(type: WsEventType, data: T) {
+  broadcast<T>(type: WsEventType, data: T, walletAddress?: string) {
     const msg = this.createMessage(type, data);
     const payload = JSON.stringify(msg);
     
     for (const [ws, info] of this.clients.entries()) {
+      if (walletAddress && info.walletAddress !== walletAddress) continue;
       try {
         ws.send(payload);
       } catch (err) {
@@ -56,6 +57,10 @@ class WebSocketHandler {
         this.unregister(ws);
       }
     }
+  }
+
+  broadcastWallet<T>(walletAddress: string, type: WsEventType, data: T) {
+    this.broadcast(type, data, walletAddress);
   }
 
   /**
