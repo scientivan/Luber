@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+
+# move
+contracts/**/build/
+
+# env
+.env
+.env.local
+*.local
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+
+# local agent state
+.lp-guardian/
+
+CLAUDE.md
+lp_guardian_brief_v5_agentic.md
+lp_guardian_brief_v5_agentic.pdf
