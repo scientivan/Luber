@@ -8,6 +8,7 @@ export type WsEventType =
   | 'threshold_breach' 
   | 'rebalance_start' 
   | 'rebalance_complete'
+  | 'status_update'
   | 'error'
   | 'ping'
   | 'pong';

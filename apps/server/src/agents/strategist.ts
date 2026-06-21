@@ -6,7 +6,7 @@ import type {
   RiskLevel,
   Position,
 } from "@lp-guardian/core";
-import { config, explorerTx, resolvePortfolio } from "../config.js";
+import { config, explorerTx, resolveActionPortfolio, resolvePortfolio } from "../config.js";
 import { pythClient } from "../services/pythClient.js";
 import * as supabaseService from "../services/supabaseService.js";
 import { beData } from "../services/beDataClient.js";
@@ -99,10 +99,13 @@ export const strategist = {
    * StrategistCap â†’ mint the audit report. Returns the real tx digests + the
    * honest counterfactual money-saved (not a fabricated constant).
    */
-  async rebalance(walletAddress: string): Promise<{ txDigest: string; explorer: string; moneySaved: number; reportTxDigest: string; preview: string }> {
+  async rebalance(
+    walletAddress: string,
+    preparedPlan?: RebalancePlan
+  ): Promise<{ txDigest: string; explorer: string; moneySaved: number; reportTxDigest: string; preview: string }> {
     const health = await this.diagnose(walletAddress);
-    const plan = buildPlanFromAllocation(health);
-    const { portfolioId, capId } = resolvePortfolio(walletAddress);
+    const plan = preparedPlan ?? buildPlanFromAllocation(health);
+    const { portfolioId, capId } = resolveActionPortfolio(walletAddress);
 
     const { txDigest, explorer } = await this.executeRebalance(capId, portfolioId, plan);
     const sim = await this.simulate(walletAddress, health.cluster.token, -10);
@@ -114,6 +117,10 @@ export const strategist = {
       txDigest,
       moneySaved: sim.guarded.moneySaved,
       clusterToken: health.cluster.token
+    }, {
+      summary: plan.preview,
+      txDigest,
+      moneySaved: sim.guarded.moneySaved,
     }).catch(console.error);
     
     // Auto-refresh baseline prices after successful rebalance

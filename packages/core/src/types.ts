@@ -167,6 +167,44 @@ export interface HistoryItem {
   txDigest?: string;
 }
 
+export interface AuthChallenge {
+  nonce: string;
+  message: string;
+  expiresAt: string;
+}
+
+export interface AuthSession {
+  sessionToken: string;
+  expiresAt: string;
+  walletAddress: string;
+}
+
+export interface RebalanceIntent {
+  planId: string;
+  preview: string;
+  steps: RebalanceStep[];
+  expectedHealthRange: [number, number];
+  approvalMessage: string;
+  expiresAt: string;
+}
+
+export interface SystemStatus {
+  overall: "operational" | "degraded";
+  checkedAt: string;
+  api: { ok: boolean; uptimeSeconds: number };
+  beData: { ok: boolean; latencyMs?: number; error?: string };
+  rpc: { ok: boolean; latencyMs?: number; checkpoint?: string; network: string; error?: string };
+  supabase: { ok: boolean; latencyMs?: number; error?: string };
+  watcher: {
+    enabled: boolean;
+    running: boolean;
+    guardedWallets: number;
+    lastCheckAt?: string;
+    lastError?: string;
+  };
+  mcp: { ok: boolean; mode: "backing_endpoints"; tools: string[] };
+}
+
 // ── Capability / Guard ──────────────────────────────────────────────────
 
 export interface GuardStatus {

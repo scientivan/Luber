@@ -1,4 +1,21 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8787";
+import type {
+  AuthChallenge,
+  AuthSession,
+  HistoryItem,
+  PoolDeepDive,
+  PortfolioHealth,
+  RebalanceIntent,
+  ShockResult,
+  SystemStatus,
+} from "@lp-guardian/core";
+
+export const API_BASE = (
+  import.meta.env.VITE_API_BASE ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8787"
+).replace(/\/+$/, "");
+
+export const WS_BASE = API_BASE.replace(/^http/, "ws");
 
 async function parseJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -7,33 +24,82 @@ async function parseJson<T>(res: Response): Promise<T> {
       const data = (await res.json()) as { error?: string };
       if (data?.error) message = data.error;
     } catch {
-      // ponytail: plain fallback until backend returns a stricter error envelope.
+      // Keep HTTP fallback.
     }
     throw new Error(message);
   }
   return res.json() as Promise<T>;
 }
 
-export async function fetchHistory(walletAddress: string, filter?: "portfolio" | "pool") {
-  const res = await fetch(`${API_BASE}/portfolio/history`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ walletAddress, filter }),
-  });
-  return parseJson<{ items: unknown[]; webLink?: string }>(res);
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  sessionToken?: string,
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (options.body) headers.set("Content-Type", "application/json");
+  if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
+  return parseJson<T>(await fetch(`${API_BASE}${path}`, { ...options, headers }));
 }
 
-export async function executeRebalance({ walletAddress, planId }: { walletAddress: string; planId?: string }) {
-  const res = await fetch(`${API_BASE}/portfolio/rebalance`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ walletAddress, planId }),
-  });
-  return parseJson<{
+const post = <T>(path: string, body: unknown, sessionToken?: string) =>
+  request<T>(path, { method: "POST", body: JSON.stringify(body) }, sessionToken);
+
+export const fetchPortfolioHealth = (walletAddress: string) =>
+  post<PortfolioHealth>("/portfolio/health", { walletAddress });
+
+export const fetchPoolHealth = (walletAddress: string, poolId: string) =>
+  post<PoolDeepDive>("/portfolio/pool-health", { walletAddress, poolId });
+
+export const simulateShock = (walletAddress: string, asset: string, pct: number) =>
+  post<ShockResult>("/simulate/shock", { walletAddress, asset, pct });
+
+export const fetchHistory = (walletAddress: string, filter: "portfolio" | "pool" | "all" = "all") =>
+  post<{ items: HistoryItem[]; webLink?: string }>("/portfolio/history", { walletAddress, filter });
+
+export const createAuthChallenge = (walletAddress: string) =>
+  post<AuthChallenge>("/auth/challenge", { walletAddress });
+
+export const verifyAuth = (walletAddress: string, nonce: string, signature: string) =>
+  post<AuthSession>("/auth/verify", { walletAddress, nonce, signature });
+
+export const logoutSession = (sessionToken: string) =>
+  post<{ ok: boolean }>("/auth/logout", {}, sessionToken);
+
+export const prepareRebalance = (walletAddress: string, sessionToken: string) =>
+  post<RebalanceIntent>("/portfolio/rebalance/prepare", { walletAddress }, sessionToken);
+
+export const executeRebalance = (
+  input: { walletAddress: string; planId: string; signature: string },
+  sessionToken: string,
+) =>
+  post<{
     txDigest: string;
     explorer: string;
     moneySaved: number;
     reportTxDigest: string;
     preview: string;
-  }>(res);
+  }>("/portfolio/rebalance", input, sessionToken);
+
+export interface GuardPreparation {
+  eligible: boolean;
+  packageId: string;
+  portfolioId: string;
+  agentAddress: string;
+  expiresAtEpoch: number;
 }
+
+export const prepareGuard = (walletAddress: string, sessionToken: string) =>
+  post<GuardPreparation>("/portfolio/guard/prepare", { walletAddress }, sessionToken);
+
+export const confirmGuard = (
+  input: { walletAddress: string; txDigest: string; capId: string },
+  sessionToken: string,
+) => post<{ active: boolean; capId: string; txDigest: string }>("/portfolio/guard/confirm", input, sessionToken);
+
+export const triggerWatcherShock = (
+  input: { walletAddress: string; asset: string; pct: number },
+  sessionToken: string,
+) => post<{ success: boolean; message: string }>("/watcher/trigger-shock", input, sessionToken);
+
+export const fetchSystemStatus = () => request<SystemStatus>("/status");

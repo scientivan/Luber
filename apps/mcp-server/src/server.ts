@@ -217,29 +217,23 @@ async function handleTool(name: string, args: Record<string, unknown>) {
       if (!poolId || !isValidSuiAddress(poolId)) {
         return errorResult("That doesn't look like a valid pool ID.");
       }
-      const data: any = await apiPost("/portfolio/health", {
+      const data: any = await apiPost("/portfolio/pool-health", {
         walletAddress: addr,
+        poolId,
       });
-      const pool = (data.positions || []).find(
-        (p: any) => p.poolId === poolId
-      );
-      if (!pool) {
-        return errorResult(
-          `Pool ${poolId} not found in this wallet's positions.`
-        );
-      }
       const text = [
-        `Pool: ${pool.pair} (${pool.protocol})`,
-        `Status: ${pool.inRange ? "In range" : `Out of range for ${pool.daysOutOfRange ?? "?"} days`}`,
-        `Value: $${Math.round(pool.valueUSD)}`,
-        pool.isDust ? "⚠ This is a dust position (gas > value)." : "",
+        `Pool: ${data.pair} (${data.protocol})`,
+        `Status: ${data.inRange ? "In range" : `Out of range for ${data.daysOutOfRange ?? "?"} days`}`,
+        `Estimated impermanent loss: $${Math.round(data.estImpermanentLossUSD ?? 0)}`,
+        `Contribution to dominant cluster: ${data.contributionToClusterPct ?? 0}%`,
+        `Exit depth: $${Math.round(data.exitLiquidity?.depthUSD ?? 0).toLocaleString()} (${data.exitLiquidity?.feasible ? "feasible" : "constrained"})`,
       ]
         .filter(Boolean)
         .join("\n");
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: {
-          ...pool,
+          ...data,
           webLink: `${WEB}/d/${addr}/pool/${poolId}?s=preview`,
         },
       };
