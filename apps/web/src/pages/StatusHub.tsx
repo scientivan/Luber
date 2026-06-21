@@ -14,10 +14,10 @@ const toolRows = [
 
 const troubleshootingLinks = [
   ["Install", "MCP Installation Guide", "/docs#installation"],
-  ["RPC", "RPC Troubleshooting", "/docs#troubleshooting"],
-  ["Wallet", "Wallet Authentication Help", "/docs#security"],
+  ["RPC", "RPC Configuration", "/docs#configuration"],
+  ["Wallet", "Wallet Safety Model", "/docs#security"],
   ["History", "Diagnostic History", "/history"],
-  ["Docs", "Open Docs", "/docs"],
+  ["Prompts", "Example Agent Prompts", "/docs#prompts"],
 ] as const;
 
 export function StatusHub() {
@@ -35,13 +35,13 @@ export function StatusHub() {
               but transaction execution happens through the web app.
             </p>
             <div className="of-status-hero-actions">
-              <a className="of-status-action dark" href="/status">
+              <button className="of-status-action dark" type="button" onClick={() => window.location.reload()}>
                 <RefreshCw size={16} /> Refresh Status
-              </a>
+              </button>
               <Link className="of-status-action" to="/docs#troubleshooting">
                 View Troubleshooting
               </Link>
-              <Link className="of-status-action violet" to="/docs">
+              <Link className="of-status-action violet" to="/docs#intro">
                 Open Docs
               </Link>
             </div>
@@ -257,7 +257,7 @@ export function StatusHub() {
             <Link className="of-status-action dark" to="/docs">
               Open documentation <ExternalLink size={18} />
             </Link>
-            <Link className="of-status-action" to="/">
+            <Link className="of-status-action" to="/#overview">
               Back to overview
             </Link>
           </div>
