@@ -9,7 +9,7 @@ import {
 import { createServer as createHttpServer, type IncomingMessage } from "node:http";
 
 const API = process.env.LPG_API_BASE ?? "http://localhost:8787";
-const WEB = process.env.LPG_WEB_BASE ?? "http://localhost:5173";
+const WEB = process.env.LPG_WEB_BASE ?? "http://localhost:3100";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

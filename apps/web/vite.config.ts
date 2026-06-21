@@ -18,7 +18,7 @@ function readGitTag(): string {
   }
 }
 
-const DEFAULT_API_BASE_URL = "https://lp-doctor-mainnet.up.railway.app";
+const DEFAULT_API_BASE_URL = "https://lpguardian-agent-sui-production.up.railway.app";
 
 function resolveApiBaseUrl(mode: string): string {
   const env = loadEnv(mode, "../../", "");

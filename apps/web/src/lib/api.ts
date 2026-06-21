@@ -102,4 +102,25 @@ export const triggerWatcherShock = (
   sessionToken: string,
 ) => post<{ success: boolean; message: string }>("/watcher/trigger-shock", input, sessionToken);
 
+export interface GuardStatus {
+  walletAddress: string;
+  guardEnabled: boolean;
+  thresholdPct: number;
+  lastCheckAt: string | null;
+  watching: boolean;
+  clusterToken: string | null;
+  baselinePrices: Record<string, number>;
+  recentActivity: Array<{
+    type: string;
+    timestamp: string;
+    summary: string;
+    moneySaved?: number;
+    txDigest?: string;
+  }>;
+  webLink: string;
+}
+
+export const fetchGuardStatus = (walletAddress: string) =>
+  post<GuardStatus>("/guard/status", { walletAddress });
+
 export const fetchSystemStatus = () => request<SystemStatus>("/status");

@@ -7,13 +7,16 @@ import { ProductShell } from "../components/ProductShell.js";
 import {
   confirmGuard,
   executeRebalance,
+  fetchGuardStatus,
   fetchPoolHealth,
   fetchPortfolioHealth,
   prepareGuard,
   prepareRebalance,
   simulateShock,
   triggerWatcherShock,
+  type GuardStatus,
 } from "../lib/api.js";
+import { WalletGate } from "../components/WalletGate.js";
 import { useWalletAuth } from "../lib/session.js";
 import { useRealtime } from "../lib/useRealtime.js";
 import "../styles/product.css";
@@ -97,8 +100,8 @@ export function PortfolioDiagnosis() {
     }
   }, [search, params.walletAddress]);
 
-  return (
-    <ProductShell title="Portfolio diagnosis" subtitle="See the correlated bet hidden across every liquidity position.">
+  const diagnosisContent = (
+    <>
       <section className="panel form-row">
         <input value={wallet} onChange={(event) => setWallet(event.target.value)} placeholder="Sui wallet address" />
         <button className="button primary" onClick={() => void diagnose()} disabled={loading || !wallet}>
@@ -139,6 +142,12 @@ export function PortfolioDiagnosis() {
           </section>
         </>
       )}
+    </>
+  );
+
+  return (
+    <ProductShell title="Portfolio diagnosis" subtitle="See the correlated bet hidden across every liquidity position.">
+      {params.walletAddress ? <WalletGate expected={params.walletAddress}>{diagnosisContent}</WalletGate> : diagnosisContent}
     </ProductShell>
   );
 }
@@ -152,22 +161,24 @@ export function PoolDiagnosis() {
   }, [walletAddress, poolId]);
   return (
     <ProductShell title="Pool diagnosis" subtitle="Inspect range health, loss estimate, cluster contribution, and exit depth.">
-      <ErrorBox error={error} />
-      {!data ? <div className="panel">Loading pool diagnosis…</div> : (
-        <>
-          <section className="metric-grid">
-            <article className="panel metric"><span>Pool</span><strong>{data.pair}</strong><small>{data.protocol}</small></article>
-            <article className="panel metric"><span>Range</span><strong>{data.inRange ? "Active" : "Inactive"}</strong><small>{data.daysOutOfRange} days out</small></article>
-            <article className="panel metric danger"><span>Estimated IL</span><strong>${data.estImpermanentLossUSD.toLocaleString()}</strong><small>model estimate</small></article>
-            <article className="panel metric"><span>Cluster share</span><strong>{data.contributionToClusterPct}%</strong><small>dominant correlated cluster</small></article>
-          </section>
-          <section className="panel">
-            <h2>Exit liquidity</h2>
-            <p>Depth: ${data.exitLiquidity.depthUSD.toLocaleString()} · Estimated slippage at 30% exit: {data.exitLiquidity.slippageBpsAt30pct} bps.</p>
-            <div className={`notice ${data.exitLiquidity.feasible ? "success" : "error"}`}>{data.exitLiquidity.feasible ? "Exit appears feasible at modeled size." : "Modeled exit exceeds available depth."}</div>
-          </section>
-        </>
-      )}
+      <WalletGate expected={walletAddress}>
+        <ErrorBox error={error} />
+        {!data ? <div className="panel">Loading pool diagnosis…</div> : (
+          <>
+            <section className="metric-grid">
+              <article className="panel metric"><span>Pool</span><strong>{data.pair}</strong><small>{data.protocol}</small></article>
+              <article className="panel metric"><span>Range</span><strong>{data.inRange ? "Active" : "Inactive"}</strong><small>{data.daysOutOfRange} days out</small></article>
+              <article className="panel metric danger"><span>Estimated IL</span><strong>${data.estImpermanentLossUSD.toLocaleString()}</strong><small>model estimate</small></article>
+              <article className="panel metric"><span>Cluster share</span><strong>{data.contributionToClusterPct}%</strong><small>dominant correlated cluster</small></article>
+            </section>
+            <section className="panel">
+              <h2>Exit liquidity</h2>
+              <p>Depth: ${data.exitLiquidity.depthUSD.toLocaleString()} · Estimated slippage at 30% exit: {data.exitLiquidity.slippageBpsAt30pct} bps.</p>
+              <div className={`notice ${data.exitLiquidity.feasible ? "success" : "error"}`}>{data.exitLiquidity.feasible ? "Exit appears feasible at modeled size." : "Modeled exit exceeds available depth."}</div>
+            </section>
+          </>
+        )}
+      </WalletGate>
     </ProductShell>
   );
 }
@@ -257,21 +268,24 @@ export function GuardSetup() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState<{ capId: string; txDigest: string } | null>(null);
+  const [guardStatus, setGuardStatus] = useState<GuardStatus | null>(null);
   const [asset, setAsset] = useState("ETH");
   const [pct, setPct] = useState(-4);
   const realtime = useRealtime(walletAddress);
 
-  function assertWallet() {
-    if (!account) throw new Error("Connect the configured demo owner wallet");
-    if (walletAddress.toLowerCase() !== account.address.toLowerCase()) throw new Error("Connected wallet does not match route wallet");
-    return account.address;
-  }
+  useEffect(() => {
+    if (!walletAddress) return;
+    void fetchGuardStatus(walletAddress).then((status) => {
+      setGuardStatus(status);
+      if (status.guardEnabled) setActive({ capId: "existing", txDigest: "" });
+    }).catch(() => {});
+  }, [walletAddress]);
 
   async function arm() {
     setBusy(true);
     setError(null);
     try {
-      const wallet = assertWallet();
+      const wallet = account!.address;
       const token = await authenticate(wallet);
       const preparation = await prepareGuard(wallet, token);
       const tx = new Transaction();
@@ -302,6 +316,7 @@ export function GuardSetup() {
         capId: created.objectId,
       }, token);
       setActive(confirmed);
+      void fetchGuardStatus(walletAddress).then(setGuardStatus).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Guard setup failed");
     } finally {
@@ -313,7 +328,7 @@ export function GuardSetup() {
     setBusy(true);
     setError(null);
     try {
-      const wallet = assertWallet();
+      const wallet = account!.address;
       const token = await authenticate(wallet);
       await triggerWatcherShock({ walletAddress: wallet, asset, pct }, token);
     } catch (err) {
@@ -325,24 +340,46 @@ export function GuardSetup() {
 
   return (
     <ProductShell title="Guard setup" subtitle="Mint a revocable capability to the agent, then observe autonomous defense in realtime.">
-      <section className="panel action-bar"><ConnectButton /><span className={realtime.connected ? "tone-good" : "tone-bad"}>{realtime.connected ? "Realtime connected" : "Realtime reconnecting"}</span></section>
-      <ErrorBox error={error} />
-      <section className="panel">
-        <h2>{active ? "Guard is active" : "Authorize strategist"}</h2>
-        <p>The capability can rebalance only the configured portfolio. It cannot withdraw funds.</p>
-        {!active ? <button className="button primary" disabled={busy} onClick={() => void arm()}>{busy ? "Waiting for wallet…" : "Sign and arm Guard"}</button> : <div className="notice success">Cap {short(active.capId)} transferred to the agent.</div>}
-      </section>
-      {active && (
+      <WalletGate expected={walletAddress}>
+        <section className="panel action-bar"><ConnectButton /><span className={realtime.connected ? "tone-good" : "tone-bad"}>{realtime.connected ? "Realtime connected" : "Realtime reconnecting"}</span></section>
+        <ErrorBox error={error} />
+
+        {guardStatus && (
+          <section className="panel">
+            <p className="product-kicker">Current status</p>
+            <h2>Guard is {guardStatus.guardEnabled ? "ON" : "OFF"}{guardStatus.watching ? " · watching live" : ""}</h2>
+            {guardStatus.clusterToken && <p>Protecting <b>{guardStatus.clusterToken}</b> cluster. Threshold: <b>{Math.abs(guardStatus.thresholdPct)}%</b> drop.</p>}
+            {guardStatus.lastCheckAt && <p style={{ color: "#777" }}>Last checked: {new Date(guardStatus.lastCheckAt).toLocaleString()}</p>}
+            {guardStatus.recentActivity.length > 0 && (
+              <div className="event-feed">
+                {guardStatus.recentActivity.map((a, i) => (
+                  <div key={`${a.timestamp}-${i}`}>
+                    <b>{a.type.replace("_", " ")}</b>
+                    <span>{a.summary}{a.moneySaved ? ` (saved ~$${Math.round(a.moneySaved)})` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         <section className="panel">
-          <h2>Demo watcher trigger</h2>
-          <div className="form-row">
-            <input value={asset} onChange={(event) => setAsset(event.target.value.toUpperCase())} />
-            <input type="number" value={pct} min="-100" max="100" onChange={(event) => setPct(Number(event.target.value))} />
-            <button className="button primary" disabled={busy} onClick={() => void trigger()}>Trigger shock</button>
-          </div>
-          <div className="event-feed">{realtime.events.filter((event) => event.type !== "connected" && event.type !== "history_load").map((event, index) => <div key={`${event.timestamp}-${index}`}><b>{event.type}</b><span>{String(event.data.text ?? event.timestamp)}</span></div>)}</div>
+          <h2>{active ? "Guard is active" : "Authorize strategist"}</h2>
+          <p>The capability can rebalance only the configured portfolio. It cannot withdraw funds — enforced by Move, not by a promise.</p>
+          {!active ? <button className="button primary" disabled={busy} onClick={() => void arm()}>{busy ? "Waiting for wallet…" : "Sign and arm Guard"}</button> : <div className="notice success">Guard is armed and watching your portfolio.</div>}
         </section>
-      )}
+        {active && (
+          <section className="panel">
+            <h2>Demo watcher trigger</h2>
+            <div className="form-row">
+              <input value={asset} onChange={(event) => setAsset(event.target.value.toUpperCase())} />
+              <input type="number" value={pct} min="-100" max="100" onChange={(event) => setPct(Number(event.target.value))} />
+              <button className="button primary" disabled={busy} onClick={() => void trigger()}>Trigger shock</button>
+            </div>
+            <div className="event-feed">{realtime.events.filter((event) => event.type !== "connected" && event.type !== "history_load").map((event, index) => <div key={`${event.timestamp}-${index}`}><b>{event.type}</b><span>{String(event.data.text ?? event.timestamp)}</span></div>)}</div>
+          </section>
+        )}
+      </WalletGate>
     </ProductShell>
   );
 }
