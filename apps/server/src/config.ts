@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 
 export const config = {
   port: Number(process.env.PORT ?? 8787),
@@ -38,7 +38,11 @@ export const config = {
     hermesUrl: process.env.PYTH_HERMES_URL ?? "https://hermes.pyth.network",
   },
 
-    supabase: {
+  cetus: {
+    apiUrl: process.env.CETUS_API_URL ?? "https://api-sui.cetus.zone",
+  },
+
+  supabase: {
     url: process.env.SUPABASE_URL ?? "",
     anonKey: process.env.SUPABASE_ANON_KEY ?? "",
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",

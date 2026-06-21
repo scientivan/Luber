@@ -1,4 +1,4 @@
-﻿import type { Position } from "@lp-guardian/core";
+import type { Position } from "@lp-guardian/core";
 import { config, resolvePortfolio } from "../config.js";
 import { suiClient } from "../chain/suiClient.js";
 import { DEMO_POSITIONS } from "../services/mockData.js";
@@ -168,7 +168,9 @@ function mapObjectToPosition(obj: any): Position | null {
 /** Fetches active Cetus pools from public REST API */
 async function fetchCetusPools(): Promise<any[]> {
   try {
-    const res = await fetch("https://api-sui.cetus.zone/v2/sui/pools");
+    const res = await fetch(
+      `${config.cetus.apiUrl}/v2/sui/pools`
+    );  
     if (!res.ok) return [];
     const json: any = await res.json();
     return json.data?.pools || [];
