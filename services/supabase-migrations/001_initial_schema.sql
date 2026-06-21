@@ -30,12 +30,12 @@ CREATE INDEX IF NOT EXISTS idx_history_logs_created ON history_logs(created_at D
 
 -- Updated_at trigger for guarded_wallets
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$$
+RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_guarded_wallets_updated_at
   BEFORE UPDATE ON guarded_wallets
