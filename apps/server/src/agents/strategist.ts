@@ -4,6 +4,7 @@ import type {
   RebalanceStep,
   ShockResult,
   RiskLevel,
+  Position,
 } from "@lp-guardian/core";
 import { config, explorerTx, resolvePortfolio } from "../config.js";
 import { pythClient } from "../services/pythClient.js";
@@ -60,8 +61,8 @@ export function buildPlanFromAllocation(health: PortfolioHealth): RebalancePlan 
  * PTBs via the StrategistCap.
  */
 export const strategist = {
-  async diagnose(walletAddress: string): Promise<PortfolioHealth> {
-    const positions = await scout.discoverPositions(walletAddress);
+  async diagnose(walletAddress: string, opts?: { positions?: Position[] }): Promise<PortfolioHealth> {
+    const positions = opts?.positions ?? (await scout.discoverPositions(walletAddress));
     const priceHistory = await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
 
     const risk = await beData.risk(positions, priceHistory);

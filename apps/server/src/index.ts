@@ -6,6 +6,7 @@ import { logger } from "hono/logger";
 import { z } from "zod";
 import { config } from "./config.js";
 import { strategist } from "./agents/strategist.js";
+import { scout } from "./agents/scout.js";
 import { watcher } from "./agents/watcher.js";
 import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import type { PortfolioHealth, ShockResult, HistoryItem } from "@lp-guardian/core";
@@ -55,12 +56,36 @@ app.get(
 
 app.get("/health", (c) => c.json({ ok: true, mockMode: config.mockMode }));
 
-// POST /portfolio/health - Diagnose portfolio
-const diagnoseSchema = z.object({ walletAddress: z.string() });
+// POST /wallet/positions - Discover a wallet's REAL Cetus LP positions (mainnet)
+const walletPositionsSchema = z.object({ walletAddress: z.string() });
+app.post("/wallet/positions", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress } = walletPositionsSchema.parse(body);
+  const positions = await scout.discoverWalletPositions(walletAddress);
+  return c.json({ positions, count: positions.length, valueBasis: "estimated_onchain" });
+});
+
+// POST /portfolio/health - Diagnose portfolio. Optionally diagnose a wallet's REAL
+// discovered positions (source: "wallet"), and/or a chosen subset (positionIds).
+const diagnoseSchema = z.object({
+  walletAddress: z.string(),
+  source: z.enum(["wallet", "portfolio"]).optional(),
+  positionIds: z.array(z.string()).optional(),
+});
 app.post("/portfolio/health", async (c) => {
   const body = await c.req.json();
-  const { walletAddress } = diagnoseSchema.parse(body);
-  const health: PortfolioHealth = await strategist.diagnose(walletAddress);
+  const { walletAddress, source, positionIds } = diagnoseSchema.parse(body);
+
+  let opts: { positions?: PortfolioHealth["positions"] } | undefined;
+  if (source === "wallet" || (positionIds && positionIds.length)) {
+    let positions = await scout.discoverWalletPositions(walletAddress);
+    if (positionIds && positionIds.length) {
+      positions = positions.filter((p) => positionIds.includes(p.objectId));
+    }
+    opts = { positions };
+  }
+
+  const health: PortfolioHealth = await strategist.diagnose(walletAddress, opts);
   return c.json(health);
 });
 

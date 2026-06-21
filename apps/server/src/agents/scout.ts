@@ -1,6 +1,6 @@
 import type { Position } from "@lp-guardian/core";
 import { config, resolvePortfolio } from "../config.js";
-import { suiClient } from "../chain/suiClient.js";
+import { suiClient, discoveryClient } from "../chain/suiClient.js";
 import { DEMO_POSITIONS } from "../services/mockData.js";
 import { deepbookClient } from "../services/deepbookClient.js";
 import { Network, TurbosSdk } from "turbos-clmm-sdk";
@@ -160,7 +160,158 @@ export const scout = {
       return {};
     }
   },
+
+  /**
+   * Discover a wallet's REAL Cetus LP positions on MAINNET (read-only). Unlike
+   * `discoverPositions` (which reads our Portfolio shared object), this scans the
+   * wallet's owned Cetus position NFTs and estimates USD value directly on-chain
+   * (CLMM amounts from liquidity + tick range + pool sqrt price Ã— Pyth spot).
+   * Returns [] when the wallet holds no Cetus positions.
+   */
+  async discoverWalletPositions(walletAddress: string): Promise<Position[]> {
+    const posType = `${config.discovery.cetusPkg}::position::Position`;
+    const owned = await discoveryClient.getOwnedObjects({
+      owner: walletAddress,
+      filter: { StructType: posType },
+      options: { showContent: true },
+    });
+
+    const fieldsList = (owned.data ?? [])
+      .map((o) => o.data?.content as any)
+      .filter((c) => c && c.dataType === "moveObject")
+      .map((c) => c.fields);
+    if (fieldsList.length === 0) return [];
+
+    // Read each unique pool's current sqrt price once.
+    const poolIds = Array.from(new Set(fieldsList.map((f: any) => f.pool)));
+    const poolSqrt = new Map<string, number>();
+    await Promise.all(
+      poolIds.map(async (pid) => {
+        try {
+          const o = await discoveryClient.getObject({
+            id: pid as string,
+            options: { showContent: true },
+          });
+          const x64 = Number((o.data?.content as any)?.fields?.current_sqrt_price ?? 0);
+          poolSqrt.set(pid as string, x64 / 2 ** 64);
+        } catch {
+          poolSqrt.set(pid as string, 0);
+        }
+      })
+    );
+
+    const positions: Position[] = [];
+    for (const f of fieldsList as any[]) {
+      const poolId = f.pool as string;
+      const liquidity = Number(f.liquidity);
+      const tickLower = decodeI32(f.tick_lower_index);
+      const tickUpper = decodeI32(f.tick_upper_index);
+      const typeA = coinTypeOf(f.coin_type_a);
+      const typeB = coinTypeOf(f.coin_type_b);
+      const symA = symbolOfType(typeA);
+      const symB = symbolOfType(typeB);
+
+      const sqrt = poolSqrt.get(poolId) ?? 0;
+      const { rawA, rawB } = clmmAmounts(liquidity, tickLower, tickUpper, sqrt);
+      const [decA, decB, priceA, priceB] = await Promise.all([
+        coinDecimals(typeA),
+        coinDecimals(typeB),
+        spotPriceUSD(symA),
+        spotPriceUSD(symB),
+      ]);
+      const valueUSD = (rawA / 10 ** decA) * priceA + (rawB / 10 ** decB) * priceB;
+      const sqrtLower = Math.pow(1.0001, tickLower / 2);
+      const sqrtUpper = Math.pow(1.0001, tickUpper / 2);
+
+      positions.push({
+        objectId: f.id?.id ?? "",
+        protocol: "cetus",
+        poolId,
+        pair: `${symA}-${symB}`,
+        tokenX: symA,
+        tokenY: symB,
+        token: canonicalToken(symA),
+        valueUSD: Math.round(valueUSD * 100) / 100,
+        inRange: sqrt > sqrtLower && sqrt < sqrtUpper,
+        daysOutOfRange: 0,
+        isDust: valueUSD < 5,
+      });
+    }
+    return positions;
+  },
 };
+
+// ---- Wallet-discovery helpers (CLMM math + on-chain metadata + Pyth spot) ----
+
+/** i32 stored as { fields: { bits: u32 } }; values â‰¥ 2^31 are negative. */
+function decodeI32(wrapped: any): number {
+  const bits = Number(wrapped?.fields?.bits ?? wrapped?.bits ?? wrapped ?? 0);
+  return bits >= 2 ** 31 ? bits - 2 ** 32 : bits;
+}
+
+/** Cetus stores coin types as TypeName { name } (no 0x prefix). */
+function coinTypeOf(wrapped: any): string {
+  const n = wrapped?.fields?.name ?? wrapped?.name ?? wrapped;
+  return typeof n === "string" ? "0x" + String(n).replace(/^0x/, "") : String(n);
+}
+
+function symbolOfType(type: string): string {
+  return (type.split("::").pop() || type).toUpperCase();
+}
+
+/** Token amounts (raw, pre-decimals) for a CLMM position. */
+function clmmAmounts(L: number, tickLower: number, tickUpper: number, currentSqrt: number) {
+  const pa = Math.pow(1.0001, tickLower / 2);
+  const pb = Math.pow(1.0001, tickUpper / 2);
+  const sc = currentSqrt;
+  let rawA = 0;
+  let rawB = 0;
+  if (sc <= pa) rawA = L * (1 / pa - 1 / pb);
+  else if (sc >= pb) rawB = L * (pb - pa);
+  else {
+    rawA = L * (1 / sc - 1 / pb);
+    rawB = L * (sc - pa);
+  }
+  return { rawA, rawB };
+}
+
+const _decCache = new Map<string, number>();
+async function coinDecimals(type: string): Promise<number> {
+  if (_decCache.has(type)) return _decCache.get(type)!;
+  try {
+    const m = await discoveryClient.getCoinMetadata({ coinType: type });
+    const d = m?.decimals ?? 9;
+    _decCache.set(type, d);
+    return d;
+  } catch {
+    return 9;
+  }
+}
+
+const _priceCache = new Map<string, number>();
+const PYTH_FEED: Record<string, string> = {
+  SUI: "Crypto.SUI/USD", ETH: "Crypto.ETH/USD", WETH: "Crypto.ETH/USD",
+  STETH: "Crypto.ETH/USD", BTC: "Crypto.BTC/USD", WBTC: "Crypto.BTC/USD",
+  USDC: "Crypto.USDC/USD", USDT: "Crypto.USDT/USD", CETUS: "Crypto.CETUS/USD",
+  DEEP: "Crypto.DEEP/USD", NS: "Crypto.NS/USD", WAL: "Crypto.WAL/USD",
+};
+const _STABLES = ["USDC", "USDT", "SUIUSDT", "USDY", "BUCK", "AUSD", "FDUSD"];
+async function spotPriceUSD(symbol: string): Promise<number> {
+  if (_STABLES.includes(symbol)) return 1;
+  if (_priceCache.has(symbol)) return _priceCache.get(symbol)!;
+  const feed = PYTH_FEED[symbol] ?? `Crypto.${symbol}/USD`;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const url = `https://benchmarks.pyth.network/v1/shims/tradingview/history?symbol=${feed}&resolution=D&from=${now - 5 * 86400}&to=${now}`;
+    const res = await fetch(url);
+    const j: any = await res.json();
+    const p = Array.isArray(j.c) && j.c.length ? Number(j.c[j.c.length - 1]) : 0;
+    _priceCache.set(symbol, p);
+    return p;
+  } catch {
+    return 0;
+  }
+}
 
 /** Parses Sui object response into LP Position domain structure */
 function mapObjectToPosition(obj: any): Position | null {

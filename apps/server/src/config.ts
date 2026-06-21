@@ -42,6 +42,15 @@ export const config = {
     apiUrl: process.env.CETUS_API_URL ?? "https://api-sui.cetus.zone",
   },
 
+  // Read-only discovery of a wallet's REAL Cetus LP positions. Defaults to MAINNET
+  // (that's where real liquidity lives) regardless of the contract network.
+  discovery: {
+    rpcUrl: process.env.DISCOVERY_RPC_URL ?? "https://fullnode.mainnet.sui.io:443",
+    cetusPkg:
+      process.env.CETUS_CLMM_PKG ??
+      "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb",
+  },
+
   supabase: {
     url: process.env.SUPABASE_URL ?? "",
     anonKey: process.env.SUPABASE_ANON_KEY ?? "",

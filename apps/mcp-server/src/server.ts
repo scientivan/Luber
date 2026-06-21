@@ -45,15 +45,42 @@ function isValidSuiAddress(addr: string): boolean {
 
 const TOOLS = [
   {
-    name: "diagnose_portfolio",
+    name: "discover_positions",
     description:
-      "Run a full portfolio health diagnosis for a Sui wallet. Shows the hidden correlation cluster, health score, stress-test, and suggested allocation. Use when the user asks 'am I safe?', 'check my portfolio', or connects a wallet.",
+      "Find the REAL Cetus LP positions held by a Sui wallet (read from mainnet), each with an estimated USD value and in/out-of-range status. Use this FIRST when the user gives a wallet address and wants to analyze THEIR OWN positions — then show the numbered list and let them pick which ones to diagnose. Returns each position's objectId so the user's selection can be passed to diagnose_portfolio.",
     inputSchema: {
       type: "object" as const,
       properties: {
         walletAddress: {
           type: "string",
           description: "Sui wallet address (0x...)",
+        },
+      },
+      required: ["walletAddress"],
+    },
+  },
+  {
+    name: "diagnose_portfolio",
+    description:
+      "Run a full portfolio health diagnosis for a Sui wallet. Shows the hidden correlation cluster, health score, stress-test, and suggested allocation. Use when the user asks 'am I safe?', 'check my portfolio', or connects a wallet. To diagnose a wallet's REAL discovered positions, set source='wallet'; pass positionIds (from discover_positions) to diagnose only a chosen subset.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        walletAddress: {
+          type: "string",
+          description: "Sui wallet address (0x...)",
+        },
+        source: {
+          type: "string",
+          enum: ["wallet", "portfolio"],
+          description:
+            "'wallet' = diagnose the wallet's REAL on-chain Cetus positions; 'portfolio' (default) = the LP Guardian demo portfolio.",
+        },
+        positionIds: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional subset of position objectIds (from discover_positions) to diagnose. Implies source='wallet'.",
         },
       },
       required: ["walletAddress"],
@@ -134,9 +161,39 @@ async function handleTool(name: string, args: Record<string, unknown>) {
   }
 
   switch (name) {
+    case "discover_positions": {
+      const data: any = await apiPost("/wallet/positions", {
+        walletAddress: addr,
+      });
+      const positions: any[] = data.positions || [];
+      if (positions.length === 0) {
+        return textResult(
+          "No Cetus LP positions found for that wallet on mainnet. (Real LP liquidity lives on Sui mainnet — testnet wallets usually have none.)"
+        );
+      }
+      const total = positions.reduce((s, p) => s + (p.valueUSD || 0), 0);
+      const lines = positions.map(
+        (p, i) =>
+          `${i + 1}. ${p.pair} — ~$${Math.round(p.valueUSD).toLocaleString()} ${p.inRange ? "(in range)" : "⚠ out of range"}${p.isDust ? " · dust" : ""}\n   id: ${p.objectId}`
+      );
+      const text = [
+        `Found ${positions.length} real Cetus position${positions.length > 1 ? "s" : ""} (~$${Math.round(total).toLocaleString()} total, value estimated on-chain):`,
+        ...lines,
+        `\nReply with which ones to diagnose (e.g. "diagnose 1 and 3"), or "all".`,
+      ].join("\n");
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: { ...data, webLink: `${WEB}/d/${addr}?s=discover` },
+      };
+    }
+
     case "diagnose_portfolio": {
       const data: any = await apiPost("/portfolio/health", {
         walletAddress: addr,
+        ...(args.source ? { source: args.source } : {}),
+        ...(Array.isArray(args.positionIds) && args.positionIds.length
+          ? { positionIds: args.positionIds }
+          : {}),
       });
       const h = data;
       const text = [
