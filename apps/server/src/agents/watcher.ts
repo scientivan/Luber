@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Autonomous Watcher — a separate 24/7 service (NOT the MCP server; MCP is
  * request/response and an LLM host is not a daemon). It holds the StrategistCap
  * (logically), polls price (Pyth live / simulate), and executes the
@@ -8,6 +8,7 @@
  */
 import { config, resolvePortfolio } from "../config.js";
 import { strategist, buildPlanFromAllocation } from "./strategist.js";
+import { pythClient } from "../services/pythClient.js";
 
 export type SaveEvent =
   | { kind: "trigger"; asset: string; pct: number; text: string }
@@ -17,8 +18,9 @@ export type SaveEvent =
 type Subscriber = (e: SaveEvent) => void;
 
 class Watcher {
-  private guarded = new Map<string, { capId: string; portfolioId: string }>();
+  private guarded = new Map<string, { capId: string; portfolioId: string; clusterToken?: string }>();
   private subscribers = new Set<Subscriber>();
+  private priceCache = new Map<string, number>();
   private timer?: NodeJS.Timeout;
 
   /** Arm Guard for a wallet. capId/portfolioId fall back to the resolved demo cap. */
@@ -50,9 +52,54 @@ class Watcher {
     this.timer = undefined;
   }
 
-  /** One poll. Live mode would read Pyth here; simulate mode is triggered manually. */
+  /** One poll. Checks Pyth for price drops and triggers autonomous saves. */
   private async tick() {
-    // Live Pyth threshold check goes here (stretch). Spine = simulate trigger.
+    if (this.guarded.size === 0) return;
+
+    try {
+      // Lazily discover cluster tokens for newly armed wallets
+      for (const [wallet, guard] of this.guarded) {
+        if (!guard.clusterToken) {
+          const health = await strategist.diagnose(wallet).catch(() => null);
+          if (health?.cluster.token) {
+            guard.clusterToken = health.cluster.token;
+            console.log(`[watcher] Cached cluster token "${guard.clusterToken}" for ${wallet.slice(0, 10)}…`);
+          }
+        }
+      }
+
+      // Collect unique tokens to price-check
+      const tokens = new Set<string>();
+      for (const guard of this.guarded.values()) {
+        if (guard.clusterToken) tokens.add(guard.clusterToken);
+      }
+      if (tokens.size === 0) return;
+
+      const currentPrices = await pythClient.getCurrentPrices(Array.from(tokens));
+
+      for (const [token, currentPrice] of Object.entries(currentPrices)) {
+        const previousPrice = this.priceCache.get(token);
+
+        if (previousPrice) {
+          const pctChange = ((currentPrice - previousPrice) / previousPrice) * 100;
+
+          if (pctChange <= config.watcher.thresholdPct) {
+            console.log(`[watcher] ⚠ ${token} dropped ${pctChange.toFixed(2)}% (threshold: ${config.watcher.thresholdPct}%)`);
+
+            for (const [wallet, guard] of this.guarded) {
+              if (guard.clusterToken === token) {
+                console.log(`[watcher] Autonomous save → ${wallet.slice(0, 10)}…`);
+                this.fireShock(wallet, token, pctChange).catch(console.error);
+              }
+            }
+          }
+        }
+
+        this.priceCache.set(token, currentPrice);
+      }
+    } catch (err) {
+      console.error("[watcher] tick error:", err);
+    }
   }
 
   /**

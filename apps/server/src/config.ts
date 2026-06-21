@@ -28,13 +28,24 @@ export const config = {
     privateKey: process.env.STRATEGIST_PRIVATE_KEY ?? "",
   },
 
-  watcher: {
+    watcher: {
     enabled: (process.env.WATCHER_ENABLED ?? "true") === "true",
     pollMs: Number(process.env.WATCHER_POLL_MS ?? 5000),
+    thresholdPct: Number(process.env.WATCHER_THRESHOLD_PCT ?? -5), // default -5% drop triggers save
   },
 
   pyth: {
     hermesUrl: process.env.PYTH_HERMES_URL ?? "https://hermes.pyth.network",
+  },
+
+  cetus: {
+    apiUrl: process.env.CETUS_API_URL ?? "https://api-sui.cetus.zone",
+  },
+
+  supabase: {
+    url: process.env.SUPABASE_URL ?? "",
+    anonKey: process.env.SUPABASE_ANON_KEY ?? "",
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   },
 
   ai: {

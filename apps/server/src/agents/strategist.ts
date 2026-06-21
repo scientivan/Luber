@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   PortfolioHealth,
   RebalancePlan,
   RebalanceStep,
@@ -15,9 +15,9 @@ const riskToU8 = (r: RiskLevel) => (r === "green" ? 0 : r === "amber" ? 1 : 2);
 
 /**
  * Build a REAL correlation-aware rebalance plan from the computed allocation.
- * Every number is derived (no hardcoded 87→40 / [58,72] / 0.72). Each step's
- * `valueUsd` is the new per-position valuation — Move `rebalance` applies these by
- * position index — distributing each token's target value across its positions in
+ * Every number is derived (no hardcoded 87â†’40 / [58,72] / 0.72). Each step's
+ * `valueUsd` is the new per-position valuation â€” Move `rebalance` applies these by
+ * position index â€” distributing each token's target value across its positions in
  * proportion to current size.
  */
 export function buildPlanFromAllocation(health: PortfolioHealth): RebalancePlan {
@@ -39,7 +39,7 @@ export function buildPlanFromAllocation(health: PortfolioHealth): RebalancePlan 
     const cur = curByToken.get(t) ?? 0;
     const newVal = tgt != null && cur > 0 ? Math.round((p.valueUSD / cur) * tgt) : Math.round(p.valueUSD);
     const action = newVal < p.valueUSD ? "reduce" : newVal > p.valueUSD ? "increase" : "hold";
-    return { stepNumber: i + 1, action, protocol: p.protocol, parameters: { poolId: p.poolId, valueUsd: newVal, token: t } };
+    return { stepNumber: i + 1, action, protocol: p.protocol, parameters: { poolId: p.poolId, valueUsd: newVal, token: t }, deepBookData: (p as any).deepBookData };
   });
 
   const targetPct = alloc?.allocations.find((a) => a.token === health.cluster.token)?.targetPct ?? 40;
@@ -48,12 +48,12 @@ export function buildPlanFromAllocation(health: PortfolioHealth): RebalancePlan 
     steps,
     expectedHealthRange: alloc?.expectedHealthRange ?? [health.healthScore, health.healthScore],
     confidence: alloc?.confidence ?? 0.5,
-    preview: `Cut ${health.cluster.token} cluster ${Math.round(health.cluster.exposurePct)}%→${Math.round(targetPct)}% into uncorrelated assets via DeepBook.`,
+    preview: `Cut ${health.cluster.token} cluster ${Math.round(health.cluster.exposurePct)}%â†’${Math.round(targetPct)}% into uncorrelated assets via DeepBook.`,
   };
 }
 
 /**
- * Strategist � the portfolio brain + the on-chain signer. Calls BE Data for
+ * Strategist ï¿½ the portfolio brain + the on-chain signer. Calls BE Data for
  * correlation/risk, assembles the diagnose payload, and (for Fix/Guard) signs
  * PTBs via the StrategistCap.
  */
@@ -92,8 +92,8 @@ export const strategist = {
   },
 
   /**
-   * One-signature Fix: diagnose → build a real plan → sign the rebalance via the
-   * StrategistCap → mint the audit report. Returns the real tx digests + the
+   * One-signature Fix: diagnose â†’ build a real plan â†’ sign the rebalance via the
+   * StrategistCap â†’ mint the audit report. Returns the real tx digests + the
    * honest counterfactual money-saved (not a fabricated constant).
    */
   async rebalance(walletAddress: string): Promise<{ txDigest: string; explorer: string; moneySaved: number; reportTxDigest: string; preview: string }> {
