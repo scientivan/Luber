@@ -76,13 +76,17 @@ app.post("/portfolio/health", async (c) => {
   const body = await c.req.json();
   const { walletAddress, source, positionIds } = diagnoseSchema.parse(body);
 
+  // Default to REAL on-chain discovery (so "check wallet X" returns that wallet's
+  // actual positions). Only `source: "portfolio"` forces the demo path. When a
+  // wallet has no real positions (testnet wallets, demo ids), we fall through to
+  // the demo/portfolio behaviour.
   let opts: { positions?: PortfolioHealth["positions"] } | undefined;
-  if (source === "wallet" || (positionIds && positionIds.length)) {
+  if (source !== "portfolio") {
     let positions = await scout.discoverWalletPositions(walletAddress);
     if (positionIds && positionIds.length) {
       positions = positions.filter((p) => positionIds.includes(p.objectId));
     }
-    opts = { positions };
+    if (positions.length > 0) opts = { positions };
   }
 
   const health: PortfolioHealth = await strategist.diagnose(walletAddress, opts);
