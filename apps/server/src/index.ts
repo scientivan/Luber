@@ -75,12 +75,21 @@ app.post("/simulate/shock", async (c) => {
   return c.json(sim);
 });
 
+// POST /portfolio/rebalance - One-signature Fix: agent signs the rebalance + mints report
+const rebalanceSchema = z.object({ walletAddress: z.string(), planId: z.string().optional() });
+app.post("/portfolio/rebalance", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress } = rebalanceSchema.parse(body);
+  const result = await strategist.rebalance(walletAddress);
+  return c.json(result);
+});
+
 // POST /watcher/trigger-shock - Manual trigger for autonomous guard demo
 app.post("/watcher/trigger-shock", async (c) => {
   const body = await c.req.json();
   const { walletAddress, asset, pct } = shockSchema.parse(body);
-  // Ensure the watcher tracks this address
-  watcher.arm(walletAddress, "0xMOCK_CAP_ID");
+  // Arm with the resolved real StrategistCap for this wallet (no mock cap).
+  watcher.arm(walletAddress);
   // Trigger async but don't wait for completion
   watcher.fireShock(walletAddress, asset, pct).catch(console.error);
   return c.json({ success: true, message: `Shock triggered for ${walletAddress}` });

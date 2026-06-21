@@ -23,10 +23,14 @@ def suggest_allocation(
     tokens, corr = correlation_matrix(price_history)
     n = len(tokens)
     if n == 0:
-        return {"allocations": [], "expectedHealthRange": [0, 0], "confidence": 0.0,
+        return {"allocations": [], "confidence": 0.0,
                 "riskOfWorsening": 0.0, "assumptions": []}
 
-    cap = RASA_MAX_EXPOSURE.get(risk_tolerance, RASA_MAX_EXPOSURE["med"])
+    requested_cap = RASA_MAX_EXPOSURE.get(risk_tolerance, RASA_MAX_EXPOSURE["med"])
+    # With sum(w)=1 and a per-token cap, the cap must be >= 1/n or the problem is
+    # infeasible (e.g. 2 tokens capped at 40% can never sum to 100%). Raise it to
+    # the feasible floor so the optimizer always returns valid weights.
+    cap = max(requested_cap, 1.0 / n)
 
     # current weights from position values
     total = sum(p.get("valueUSD", 0.0) for p in positions) or 1.0
@@ -50,8 +54,8 @@ def suggest_allocation(
     allocations = [
         {
             "token": tokens[i],
-            "currentPct": round(100.0 * cur[i], 1),
-            "targetPct": round(100.0 * w[i], 1),
+            "currentPct": round(float(100.0 * cur[i]), 1),
+            "targetPct": round(float(100.0 * w[i]), 1),
         }
         for i in range(n)
     ]
@@ -61,9 +65,10 @@ def suggest_allocation(
     # crude confidence: how much variance we removed, clamped
     confidence = float(np.clip(1.0 - (var_after / var_before if var_before else 1.0), 0.4, 0.85))
 
+    # expectedHealthRange is injected by compute_risk (it owns the health formula
+    # and the dust/out-of-range context); not fabricated here.
     return {
         "allocations": allocations,
-        "expectedHealthRange": [58, 72],
         "confidence": round(confidence, 2),
         "riskOfWorsening": round(float(np.clip(var_after / (var_before or 1.0), 0.05, 0.3)), 2),
         "assumptions": [

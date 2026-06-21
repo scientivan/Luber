@@ -14,6 +14,35 @@ def _risk_level(score: float) -> str:
     return "red"
 
 
+def health_score(concentration: float, n_dust: int, n_out_of_range: int) -> float:
+    """Transparent health formula (single source of truth).
+
+    Penalizes correlation concentration above 30%, dust positions, and
+    out-of-range positions. Used both for the current score and for projecting
+    post-rebalance health (so projections stay consistent with the headline).
+    """
+    score = 100.0
+    score -= max(0.0, concentration - 30) * 0.7  # concentration above 30% hurts
+    score -= n_dust * 4
+    score -= n_out_of_range * 5
+    return max(0.0, min(100.0, score))
+
+
+def health_after_concentration(
+    positions: list[dict],
+    price_history: dict[str, list[float]],
+    new_concentration_pct: float,
+) -> int:
+    """Project health if the dominant cluster were cut to ``new_concentration_pct``.
+
+    Dust/out-of-range penalties are held constant (a rebalance does not assume it
+    fixes them), so the only thing that moves is the concentration term.
+    """
+    dust = [i for i, p in enumerate(positions) if p.get("valueUSD", 0.0) < DUST_THRESHOLD_USD]
+    out_of_range = [i for i, p in enumerate(positions) if not p.get("inRange", True)]
+    return round(health_score(new_concentration_pct, len(dust), len(out_of_range)))
+
+
 def compute_risk(
     positions: list[dict],
     price_history: dict[str, list[float]],
@@ -26,12 +55,7 @@ def compute_risk(
     dust = [i for i, p in enumerate(positions) if p.get("valueUSD", 0.0) < DUST_THRESHOLD_USD]
     out_of_range = [i for i, p in enumerate(positions) if not p.get("inRange", True)]
 
-    # Health score: penalize concentration, dust, and out-of-range positions.
-    score = 100.0
-    score -= max(0.0, concentration - 30) * 0.7  # concentration above 30% hurts
-    score -= len(dust) * 4
-    score -= len(out_of_range) * 5
-    score = max(0.0, min(100.0, round(score)))
+    score = round(health_score(concentration, len(dust), len(out_of_range)))
 
     insights = []
     if concentration >= 50:
@@ -66,12 +90,31 @@ def compute_risk(
             "affectedPositions": out_of_range,
         })
 
+    alloc = suggest_allocation(positions, price_history, risk_tolerance)
+
+    # Project post-rebalance health from the suggested target weights, using the
+    # SAME concentration definition as the headline (detect_cluster on pseudo
+    # positions synthesized from the target allocation). No hardcoded range.
+    total = sum(p.get("valueUSD", 0.0) for p in positions) or 1.0
+    pseudo = [
+        {"token": a["token"], "valueUSD": a["targetPct"] / 100.0 * total}
+        for a in alloc["allocations"]
+    ]
+    proj_concentration = detect_cluster(pseudo, price_history)["concentration"] if pseudo else concentration
+    proj_health = health_after_concentration(positions, price_history, proj_concentration)
+    # Band widens as confidence drops (less certain → wider range).
+    band = max(3, round((1.0 - alloc["confidence"]) * 20))
+    alloc["expectedHealthRange"] = [
+        max(0, proj_health - band),
+        min(100, proj_health + band),
+    ]
+
     return {
         "healthScore": score,
         "riskLevel": _risk_level(score),
         "cluster": corr["cluster"],
         "dust": dust,
         "insights": insights[:3],
-        "suggestedAllocation": suggest_allocation(positions, price_history, risk_tolerance),
-        "confidence": 0.72,
+        "suggestedAllocation": alloc,
+        "confidence": alloc["confidence"],
     }

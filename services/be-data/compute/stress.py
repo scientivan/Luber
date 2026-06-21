@@ -30,7 +30,7 @@ def stress_test(
     total_loss = 0.0
     for pi, pos in enumerate(positions):
         tok = pos.get("token") or pos.get("tokenX")
-        beta = abs(corr[idx[asset], idx[tok]]) if (asset in idx and tok in idx) else 0.0
+        beta = float(abs(corr[idx[asset], idx[tok]])) if (asset in idx and tok in idx) else 0.0
         loss = pos.get("valueUSD", 0.0) * move * beta
         per_position.append({"positionIndex": pi, "lossUSD": round(loss, 2)})
         total_loss += loss
