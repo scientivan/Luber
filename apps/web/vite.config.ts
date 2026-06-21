@@ -1,0 +1,61 @@
+import { execSync } from "node:child_process";
+import react from "@vitejs/plugin-react";
+import { defineConfig, loadEnv } from "vite";
+
+// Latest annotated git tag — injected as VITE_GIT_TAG so the header
+// chip stays in sync with releases without a manual bump. Falls back
+// to "dev" outside a git checkout (e.g. Docker build context).
+function readGitTag(): string {
+  try {
+    return execSync("git describe --tags --abbrev=0", {
+      cwd: __dirname,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return "dev";
+  }
+}
+
+const DEFAULT_API_BASE_URL = "https://lp-doctor-mainnet.up.railway.app";
+
+function resolveApiBaseUrl(mode: string): string {
+  const env = loadEnv(mode, "../../", "");
+  const raw =
+    env.VITE_LPDOCTOR_API_URL ??
+    env.VITE_API_URL ??
+    DEFAULT_API_BASE_URL;
+  const trimmed = raw.trim();
+  if (!trimmed) return DEFAULT_API_BASE_URL;
+  if (
+    trimmed.includes("localhost:3001") ||
+    trimmed.includes("lp-doctor-production.up.railway.app")
+  ) {
+    return DEFAULT_API_BASE_URL;
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
+// Load env from the workspace root so VITE_LPDOCTOR_AGENT_CONTRACT,
+// VITE_LPDOCTOR_API_URL, VITE_OG_GALILEO_RPC etc. resolved by /agent
+// and the main diagnostic surfaces come from the same env source.
+export default defineConfig(({ mode }) => {
+  const apiBaseUrl = resolveApiBaseUrl(mode);
+
+  return {
+    plugins: [react()],
+    envDir: "../../",
+    define: {
+      "import.meta.env.VITE_GIT_TAG": JSON.stringify(readGitTag()),
+    },
+    server: {
+      port: 3100,
+      strictPort: true,
+      proxy: {
+        "/api": apiBaseUrl,
+        "/health": apiBaseUrl,
+      },
+    },
+  };
+});

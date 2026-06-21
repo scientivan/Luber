@@ -1,0 +1,261 @@
+/* LPGuardian - Atlas Page Styles (Diagnostic History) */
+/* Scope: .atlas-theme. Product-register Sui Overflow scanner surface. */
+
+.atlas-theme {
+  min-height: 100dvh;
+  background: var(--of-paper);
+  color: var(--of-ink);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  overflow-x: clip;
+}
+
+/* ── Logged Out Screen ────────────────────────────────────────────── */
+.atlas-logged-out {
+  min-height: calc(100vh - 72px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.atlas-connect-panel {
+  background: var(--of-paper);
+  border: var(--of-line);
+  box-shadow: 6px 6px 0 var(--of-ink);
+  padding: 48px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.atlas-connect-panel img {
+  height: 64px;
+}
+
+.atlas-connect-panel h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+.atlas-connect-panel p {
+  color: var(--of-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.atlas-safety-note {
+  border-top: var(--of-line);
+  padding-top: 24px;
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--of-ink);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ── Logged In Layout ────────────────────────────────────────────── */
+.atlas-dashboard {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 72px);
+}
+
+.atlas-header {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  border-bottom: var(--of-line);
+  background: var(--of-warm);
+}
+
+.atlas-header-cell {
+  padding: 16px 24px;
+  border-right: var(--of-line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.atlas-header-cell:last-child {
+  border-right: none;
+}
+
+.atlas-header-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--of-muted);
+  letter-spacing: 0.05em;
+}
+
+.atlas-header-value {
+  font-size: 0.95rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-weight: 600;
+}
+
+/* ── Dual Filter Tabs ────────────────────────────────────────────── */
+.atlas-tabs {
+  display: flex;
+  border-bottom: var(--of-line);
+  background: var(--of-paper);
+}
+
+.atlas-tab {
+  flex: 1;
+  padding: 16px 24px;
+  border: none;
+  border-right: var(--of-line);
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--of-ink);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.atlas-tab:last-child {
+  border-right: none;
+}
+
+.atlas-tab:hover {
+  background: color-mix(in srgb, var(--of-ink) 5%, transparent);
+}
+
+.atlas-tab.active {
+  background: var(--of-blue);
+  color: var(--of-ink);
+}
+
+.atlas-tab.active:last-child {
+  background: var(--of-yellow);
+}
+
+/* ── Content Area ────────────────────────────────────────────────── */
+.atlas-content {
+  flex: 1;
+  padding: 32px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Portfolio View ──────────────────────────────────────────────── */
+.atlas-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.atlas-metric-card {
+  border: var(--of-line);
+  background: var(--of-paper);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.atlas-metric-card.healthy { background: var(--of-mint); }
+.atlas-metric-card.drift { background: var(--of-yellow); }
+.atlas-metric-card.bleeding { background: var(--of-orange); }
+
+.atlas-metric-label {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.atlas-metric-value {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.atlas-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.atlas-log-card {
+  border: var(--of-line);
+  background: var(--of-paper);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.85rem;
+}
+
+.atlas-log-card .timestamp { color: var(--of-muted); }
+.atlas-log-card .agent { font-weight: 600; }
+.atlas-log-card .summary { flex: 1; }
+
+.atlas-status-pill {
+  padding: 4px 12px;
+  border: 1px solid var(--of-ink);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+.atlas-status-pill.healthy { background: var(--of-mint); }
+.atlas-status-pill.warning { background: var(--of-orange); color: var(--of-paper); }
+
+/* ── Pool View ───────────────────────────────────────────────────── */
+.atlas-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: var(--of-line);
+  background: var(--of-paper);
+}
+
+.atlas-table th, .atlas-table td {
+  padding: 16px;
+  text-align: left;
+  border: var(--of-line);
+  font-size: 0.9rem;
+}
+
+.atlas-table th {
+  background: var(--of-ink);
+  color: var(--of-paper);
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+}
+
+.atlas-table tr.warning {
+  border: 2px solid var(--of-orange);
+  background: color-mix(in srgb, var(--of-orange) 5%, var(--of-paper));
+}
+
+.atlas-table td.monospace {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.atlas-table-action {
+  background: var(--of-ink);
+  color: var(--of-paper);
+  border: none;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.atlas-table-action:hover {
+  background: var(--of-blue);
+  color: var(--of-ink);
+}
