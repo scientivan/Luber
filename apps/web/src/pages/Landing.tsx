@@ -12,6 +12,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { HoverGridBackground } from "../components/HoverGridBackground";
 import { LandingActionButton } from "../components/LandingActionButton";
+import { OverflowHeader } from "../components/OverflowHeader";
 import "../styles/landing.css";
 
 const navItems = [
@@ -25,7 +26,7 @@ const navItems = [
 const integrations = ["Hermes", "OpenClaw", "Claude", "GPT / Codex", "Local agents"];
 
 const steps = [
-  ["01", "Install MCP Server", "Add LPGuardian to the AI client or agent you already use."],
+  ["01", "Install MCP Server", "Add Luber to the AI client or agent you already use."],
   ["02", "Enter Wallet Address", "Ask your agent to inspect a Slush wallet or a specific Cetus pool."],
   ["03", "Get LLM Diagnosis", "Receive structured portfolio or pool risk analysis with evidence."],
   ["04", "Execute Safely on Web", "Review, sign, and execute rebalance actions through Slush."],
@@ -42,9 +43,9 @@ const features = [
 
 const faqs = [
   ["Can an AI agent move my funds?", "No. MCP tools can diagnose public wallet and pool data, but transaction execution only happens in the web app after explicit Slush approval."],
-  ["What can LPGuardian diagnose?", "LPGuardian can analyze portfolio-level LP risk and individual Cetus pools, including range activity, fee performance, volatility exposure, and suggested next steps."],
+  ["What can Luber diagnose?", "Luber can analyze portfolio-level LP risk and individual Cetus pools, including range activity, fee performance, volatility exposure, and suggested next steps."],
   ["Do I need to connect a wallet to run a diagnosis?", "An agent can inspect public wallet data from an address. Connecting a wallet is only needed for web authentication, diagnostic history, and approving execution."],
-  ["Is LPGuardian financial advice?", "No. LPGuardian provides risk analysis, not financial advice. Slippage and market movement may affect any rebalance execution."],
+  ["Is Luber financial advice?", "No. Luber provides risk analysis, not financial advice. Slippage and market movement may affect any rebalance execution."],
 ] as const;
 
 export function Landing() {
@@ -107,12 +108,12 @@ export function Landing() {
         <div className="of-hero-flow-copy">
           <section id="overview" className="of-hero-copy">
             <p className="of-kicker"><span>Sui Overflow 2026</span> AI × DeFi infrastructure</p>
-            <h1>LP Guardian</h1>
+            <h1>Luber</h1>
             <h2>Universal AI assistant for Sui liquidity risk.</h2>
-            <p className="of-hero-text">Connect LPGuardian to your MCP-compatible AI agent, diagnose Cetus LP positions, review diagnostic history, and approve safer rebalance execution through Slush.</p>
+            <p className="of-hero-text">Connect Luber to your MCP-compatible AI agent, diagnose Cetus LP positions, review diagnostic history, and approve safer rebalance execution through Slush.</p>
             <div className="of-hero-actions">
-              <LandingActionButton tone="dark" onClick={() => scrollToSection("install")}>Install MCP</LandingActionButton>
-              <LandingActionButton tone="yellow" onClick={() => nav("/developers")}>Read documentation</LandingActionButton>
+              <LandingActionButton tone="dark" onClick={() => nav("/docs#installation")}>Install MCP</LandingActionButton>
+              <LandingActionButton tone="yellow" onClick={() => nav("/docs")}>Read documentation</LandingActionButton>
             </div>
             <div className="of-safety-notes">
               <p className="of-safety-line"><ShieldCheck size={17} strokeWidth={2.25} /> AI diagnosis does not move funds.</p>
@@ -123,17 +124,17 @@ export function Landing() {
           <section id="install" className="of-compatible-copy-panel">
             <div className="of-section-top dark"><span>Compatible With</span><span>&lt;mcp&gt; connect the agent you already use &lt;/mcp&gt;</span></div>
             <div className="of-compatible-copy">
-              <h2>LPGuardian plugs into the AI clients or local agents you already use.</h2>
-              <p>LPGuardian runs through Model Context Protocol, so the install step feels native to Claude, GPT / Codex, Hermes, OpenClaw, and local agent workflows before diagnosis starts.</p>
+              <h2>Luber plugs into the AI clients or local agents you already use.</h2>
+              <p>Luber runs through Model Context Protocol, so the install step feels native to Claude, GPT / Codex, Hermes, OpenClaw, and local agent workflows before diagnosis starts.</p>
               <div className="of-compatible-inline-list">{integrations.map((name) => <span key={name}>{name}</span>)}</div>
             </div>
           </section>
         </div>
 
-        <aside className="of-hero-rail" aria-label="LPGuardian hero assets">
-          <div ref={heroArtRef} className="of-asset-stage" aria-label="Sample LPGuardian diagnosis">
+        <aside className="of-hero-rail" aria-label="Luber hero assets">
+          <div ref={heroArtRef} className="of-asset-stage" aria-label="Sample Luber diagnosis">
             <HoverGridBackground className="of-hover-grid-bg" gridClassName="of-hover-grid" squareSize={48} trailLength={8} targetRef={heroArtRef} />
-            <img className="of-brand-text" src="/assets/lp-guardian-text.webp" alt="LPGuardian" />
+            <img className="of-brand-text" src="/assets/luber-text.webp" alt="Luber" />
           </div>
         </aside>
       </section>
@@ -152,11 +153,11 @@ export function Landing() {
 
       <section ref={demoRef} id="demo" className="of-demo of-grid-paper">
         <HoverGridBackground className="of-hover-grid-bg of-demo-hover-grid-bg" gridClassName="of-hover-grid of-demo-hover-grid" squareSize={48} trailLength={10} targetRef={demoRef} />
-        <div className="of-demo-copy"><p className="of-kicker">Demo & showcase</p><h2>Agent diagnoses. You approve.</h2><p>Short loop: ask, inspect, approve only when capital moves.</p><button className="of-inline-link" type="button" onClick={() => nav("/agent")}>View agent workspace <ExternalLink size={18} /></button></div>
-        <div className="of-demo-chain" aria-label="LPGuardian workflow">
+        <div className="of-demo-copy"><p className="of-kicker">Demo & showcase</p><h2>Agent diagnoses. You approve.</h2><p>Short loop: ask, inspect, approve only when capital moves.</p><button className="of-inline-link" type="button" onClick={() => nav("/docs#prompts")}>View agent workspace <ExternalLink size={18} /></button></div>
+        <div className="of-demo-chain" aria-label="Luber workflow">
           <DemoPanel index="01" title="AI Client" body="Ask your agent to inspect a wallet." icon={<Code2 />} />
           <div className="of-chain-arrow" aria-hidden="true"><ArrowRight /></div>
-          <DemoPanel index="02" title="LPGuardian MCP" body="Returns risk signals and evidence." icon={<Check />} />
+          <DemoPanel index="02" title="Luber MCP" body="Returns risk signals and evidence." icon={<Check />} />
           <div className="of-chain-arrow" aria-hidden="true"><ArrowRight /></div>
           <DemoPanel index="03" title="Web App" body="Review and sign with Slush." icon={<WalletCards />} />
         </div>
@@ -173,8 +174,8 @@ export function Landing() {
       </section>
 
       <footer className="of-follow">
-        <div className="of-follow-inner"><div><p className="of-kicker">Ready when your agent is.</p><h2>Install. Diagnose. Review. Rebalance.</h2></div><div className="of-follow-actions"><LandingActionButton tone="dark" size="follow" onClick={() => scrollToSection("install")}>Install MCP</LandingActionButton><button className="of-outline-button" type="button" onClick={() => nav("/atlas")}>Launch app <ArrowUpRight /></button></div></div>
-        <div className="of-footer-links"><span>LPGuardian</span><Link to="/docs">Docs</Link><Link to="/docs/install">MCP Installation</Link><Link to="/atlas">Diagnostic History</Link><Link to="/agent">Network Status</Link></div>
+        <div className="of-follow-inner"><div><p className="of-kicker">Ready when your agent is.</p><h2>Install. Diagnose. Review. Rebalance.</h2></div><div className="of-follow-actions"><LandingActionButton tone="dark" size="follow" onClick={() => nav("/docs#installation")}>Install MCP</LandingActionButton><button className="of-outline-button" type="button" onClick={() => nav("/atlas")}>Launch app <ArrowUpRight /></button></div></div>
+        <div className="of-footer-links"><span>Luber</span><Link to="/docs">Docs</Link><Link to="/docs#installation">MCP Installation</Link><Link to="/history">Diagnostic History</Link><Link to="/status">Network Status</Link></div>
       </footer>
     </main>
   );
@@ -184,7 +185,7 @@ function DemoPanel({ index, title, body, icon }: { index: string; title: string;
   return <article className="of-demo-panel"><div><span>{index}</span>{icon}</div><h3>{title}</h3><p>{body}</p></article>;
 }
 
-function LandingIntro() { return <div className="of-intro" aria-hidden="true"><div className="of-intro-core"><img className="of-intro-logo" src="/lp-guardian-logo.webp" alt="" /></div></div>; }
+function LandingIntro() { return <div className="of-intro" aria-hidden="true"><div className="of-intro-core"><img className="of-intro-logo" src="/luber-logo.webp" alt="" /></div></div>; }
 
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
@@ -192,7 +193,4 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
   return <article className={`of-faq-item ${open ? "open" : ""}`}><button className="of-faq-trigger" type="button" aria-expanded={open} aria-controls={answerId} onClick={() => setOpen((value) => !value)}><span>{question}</span><ChevronDown aria-hidden="true" /></button><div id={answerId} className="of-faq-answer" aria-hidden={!open}><div><p>{answer}</p></div></div></article>;
 }
 
-function OverflowHeader({ activeSection, mobileMenuOpen, onToggleMenu, onNavigate }: { activeSection: (typeof navItems)[number][1]; mobileMenuOpen: boolean; onToggleMenu: () => void; onNavigate: (sectionId: (typeof navItems)[number][1]) => void }) {
-  return <header className="of-header"><a href="#overview" className="of-header-brand"><img className="of-header-logo" src="/lp-guardian-logo.webp" alt="LPGuardian logo" /><span><strong>LPGuardian</strong><small>for Sui Overflow 2026</small></span></a><div className="of-header-actions"><div className="of-header-status"><span>Network</span><b><i /> Operational</b></div><a className="of-header-launch" href="/atlas"><span className="of-header-launch-icon" aria-hidden="true"><ArrowRight /></span><span className="of-header-launch-label">Launch App</span></a></div><button className="of-menu-button" type="button" aria-expanded={mobileMenuOpen} aria-controls="mobile-section-menu" aria-label="Open section menu" onClick={onToggleMenu}>Menu</button><div id="mobile-section-menu" className={`of-mobile-menu ${mobileMenuOpen ? "open" : ""}`}>{navItems.map(([label, id]) => <button key={id} className={activeSection === id ? "active" : ""} type="button" onClick={() => onNavigate(id)}>{label}</button>)}</div></header>;
-}
 
