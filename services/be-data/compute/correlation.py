@@ -17,8 +17,11 @@ def correlation_matrix(price_history: dict[str, list[float]]):
     if rets.shape[0] < 2 or len(tokens) < 2:
         n = len(tokens)
         return tokens, np.eye(n)
-    # np.corrcoef expects variables in rows
-    corr = np.corrcoef(rets.T)
+    # np.corrcoef expects variables in rows. Flat series (e.g. stablecoins) have
+    # zero variance → corrcoef divides by 0 → NaN; we silence that and treat an
+    # undefined correlation as 0 (uncorrelated), with a 1.0 self-correlation.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr = np.corrcoef(rets.T)
     corr = np.nan_to_num(corr, nan=0.0)
     np.fill_diagonal(corr, 1.0)
     return tokens, corr

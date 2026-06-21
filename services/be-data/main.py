@@ -4,6 +4,8 @@ Pure-compute, zero Sui deps. Implements the §7.2 contract (BE Agent → BE Data
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -33,13 +35,13 @@ class RiskReq(BaseModel):
     positions: list[dict]
     priceHistory: dict[str, list[float]]
     deepBookDepth: dict | None = None
-    riskTolerance: str = "med"
+    riskTolerance: Literal["low", "med", "high"] = "med"
 
 
 class StressReq(BaseModel):
     positions: list[dict]
     priceHistory: dict[str, list[float]]
-    asset: str
+    asset: str = Field(min_length=1)
     pct: float = Field(ge=-100, le=100)
 
 
