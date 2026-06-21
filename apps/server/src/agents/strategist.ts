@@ -7,13 +7,14 @@ import type {
 import { config, explorerTx } from "../config.js";
 import { beData } from "../services/beDataClient.js";
 import { scout } from "./scout.js";
+import { aiClient } from "../services/aiClient.js";
 import { suiClient, strategistKeypair } from "../chain/suiClient.js";
 import { buildRebalanceTx, buildHealthReportTx } from "../chain/moveCalls.js";
 
 const riskToU8 = (r: RiskLevel) => (r === "green" ? 0 : r === "amber" ? 1 : 2);
 
 /**
- * Strategist — the portfolio brain + the on-chain signer. Calls BE Data for
+ * Strategist â€” the portfolio brain + the on-chain signer. Calls BE Data for
  * correlation/risk, assembles the diagnose payload, and (for Fix/Guard) signs
  * PTBs via the StrategistCap.
  */
@@ -26,9 +27,9 @@ export const strategist = {
     const stress = await beData.stress(positions, priceHistory, risk["cluster"].token, -10);
 
     const totalValueUSD = positions.reduce((s, p) => s + p.valueUSD, 0);
-    const bleedingPools = positions
-      .filter((p) => !p.inRange || p.isDust)
-      .map((p) => ({ poolId: p.poolId, protocol: p.protocol, pair: p.pair, status: "bleeding" as const }));
+    
+    // Delegate complex pool diagnosis to the embedded AI Engine
+    const bleedingPools = await aiClient.diagnosePools(positions, priceHistory);
 
     return {
       walletAddress,

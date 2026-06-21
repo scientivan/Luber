@@ -13,7 +13,7 @@ export const config = {
   },
 
   strategist: {
-    // Agent key holds the StrategistCap only â€” never the user's funds.
+    // Agent key holds the StrategistCap only — never the user's funds.
     privateKey: process.env.STRATEGIST_PRIVATE_KEY ?? "",
   },
 
@@ -26,11 +26,17 @@ export const config = {
     hermesUrl: process.env.PYTH_HERMES_URL ?? "https://hermes.pyth.network",
   },
 
+  ai: {
+    apiKey: process.env.GEMINI_API_KEY ?? "",
+    model: process.env.AI_MODEL ?? "gemini-1.5-flash",
+    enabled: !!process.env.GEMINI_API_KEY,
+  },
+
   // When no package is deployed yet, run on mock data so every surface works.
   get mockMode() {
     return (process.env.MOCK_MODE ?? (this.sui.packageId === "0x0" ? "true" : "false")) === "true";
   },
 };
 
-export const explorerTx = (digest: string) => `${config.sui.explorerBase}/tx/${digest}`;
-export const explorerObj = (id: string) => `${config.sui.explorerBase}/object/${id}`;
+export const explorerTx = (digest: string) => `/tx/`;
+export const explorerObj = (id: string) => `/object/`;
