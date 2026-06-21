@@ -8,6 +8,7 @@ import { config } from "./config.js";
 import { strategist } from "./agents/strategist.js";
 import { scout } from "./agents/scout.js";
 import { watcher } from "./agents/watcher.js";
+import * as supabaseService from "./services/supabaseService.js";
 import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import type { PortfolioHealth, ShockResult, HistoryItem } from "@lp-guardian/core";
 import { wsHandler } from "./websocket/wsHandler.js";
@@ -99,12 +100,24 @@ app.post("/portfolio/history", async (c) => {
   const body = await c.req.json();
   const { walletAddress } = historySchema.parse(body);
   
-  // Return mock history for demo purposes
+  let items: HistoryItem[] = [];
+  try {
+    const rawEvents = await supabaseService.getHistory(walletAddress, 50);
+    items = rawEvents.map((e: any) => ({
+      id: e.id,
+      type: e.event_type === "rebalance" ? "autonomous_save" : e.event_type === "manual_rebalance" ? "fix" : "diagnosis",
+      level: "portfolio",
+      timestamp: e.created_at,
+      summary: e.event_type === "rebalance" ? `Rebalanced ${e.details.asset} cluster. Saved ~$${Math.round(e.details.moneySaved || 0)}` : e.event_type === "threshold_breach" ? `${e.details.asset} dropped ${Math.abs(e.details.dropPct).toFixed(2)}%` : e.event_type,
+      moneySaved: e.details.moneySaved,
+      txDigest: e.details.txDigest
+    }));
+  } catch (err) {
+    console.error("[history] Failed to fetch real history:", err);
+  }
+
   const history: { items: HistoryItem[]; webLink: string } = {
-    items: [
-      { id: "h1", type: "autonomous_save", level: "portfolio", timestamp: new Date(Date.now() - 3600000).toISOString(), summary: "Cut ETH cluster 87%→40% after -4% shock", moneySaved: 1200, txDigest: "0xMockSave123" },
-      { id: "h2", type: "diagnosis", level: "portfolio", timestamp: new Date(Date.now() - 86400000).toISOString(), summary: "Health 42/100, 87% ETH cluster" }
-    ],
+    items,
     webLink: `${config.beDataUrl.replace("8000", "5173")}/history/${walletAddress}`
   };
   return c.json(history);
