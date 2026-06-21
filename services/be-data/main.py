@@ -14,6 +14,7 @@ from compute.correlation import detect_cluster
 from compute.risk import compute_risk
 from compute.stress import stress_test
 from compute.simulation import simulate_shock
+from compute.pool import deep_diagnose_pool
 from data.prices import resolve_price_history
 
 app = FastAPI(title="LP Guardian — BE Data", version="0.1.0")
@@ -52,6 +53,13 @@ class ShockReq(StressReq):
     plan: dict | None = None
 
 
+class PoolDiagnoseReq(BaseModel):
+    positions: list[dict]
+    priceHistory: dict[str, list[float]] | None = None
+    poolId: str = Field(min_length=1)
+    deepBookDepth: dict | None = None
+
+
 # ── routes ───────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
@@ -82,6 +90,14 @@ def stress(req: StressReq):
 def shock(req: ShockReq):
     ph, prov = resolve_price_history(req.positions, req.priceHistory)
     out = simulate_shock(req.positions, ph, req.asset, req.pct, req.plan)
+    out["priceProvenance"] = prov
+    return out
+
+
+@app.post("/compute/pool-diagnose")
+def pool_diagnose(req: PoolDiagnoseReq):
+    ph, prov = resolve_price_history(req.positions, req.priceHistory)
+    out = deep_diagnose_pool(req.positions, ph, req.poolId, req.deepBookDepth)
     out["priceProvenance"] = prov
     return out
 

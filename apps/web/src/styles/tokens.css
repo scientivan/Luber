@@ -114,6 +114,9 @@ button:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
 }
 .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
   height: 22px; padding: 0 8px; border-radius: 4px;

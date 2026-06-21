@@ -10,6 +10,7 @@ import { config, explorerTx, resolvePortfolio } from "../config.js";
 import { pythClient } from "../services/pythClient.js";
 import * as supabaseService from "../services/supabaseService.js";
 import { beData } from "../services/beDataClient.js";
+import { deepbookClient } from "../services/deepbookClient.js";
 import { scout } from "./scout.js";
 import { suiClient, strategistKeypair } from "../chain/suiClient.js";
 import { buildRebalanceTx, buildHealthReportTx } from "../chain/moveCalls.js";
@@ -88,10 +89,32 @@ export const strategist = {
     };
   },
 
-  async simulate(walletAddress: string, asset: string, pct: number): Promise<ShockResult> {
-    const positions = await scout.discoverPositions(walletAddress);
+  async simulate(walletAddress: string, asset: string, pct: number, opts?: { positions?: Position[] }): Promise<ShockResult> {
+    const positions = opts?.positions ?? (await scout.discoverPositions(walletAddress));
     const priceHistory = await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
     return beData.simulateShock(positions, priceHistory, asset, pct) as Promise<ShockResult>;
+  },
+
+  /**
+   * Deep-dive ONE pool flagged by `diagnose`. Computes IL, the pool's contribution
+   * to the dominant cluster, and DeepBook exit-liquidity feasibility. Uses the same
+   * positions the portfolio diagnosis saw (pass `opts.positions` for the REAL
+   * mainnet wallet positions; otherwise falls back to the demo portfolio).
+   */
+  async deepDiagnosePool(walletAddress: string, poolId: string, opts?: { positions?: Position[] }): Promise<any> {
+    const positions = opts?.positions ?? (await scout.discoverPositions(walletAddress));
+    const pool = positions.find((p) => p.poolId === poolId);
+    if (!pool) throw new Error(`Pool ${poolId} not found in this wallet's positions.`);
+
+    const priceHistory = await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
+    // Exit-liquidity needs order-book depth. Reuse the DeepBook profile (real when
+    // available, graceful synthetic fallback otherwise).
+    const deepBookDepth =
+      (pool as any).deepBookData ??
+      (await deepbookClient.getLiquidityProfile(pool.poolId, pool.tokenX, pool.tokenY).catch(() => undefined));
+
+    const result = await beData.poolDiagnose(positions, priceHistory, poolId, deepBookDepth);
+    return { ...result, deepBookData: deepBookDepth };
   },
 
   /**

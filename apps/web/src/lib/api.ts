@@ -37,3 +37,49 @@ export async function executeRebalance({ walletAddress, planId }: { walletAddres
     preview: string;
   }>(res);
 }
+
+async function post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson<T>(res);
+}
+
+export function fetchPositions(walletAddress: string) {
+  return post<{ positions: any[]; count: number; valueBasis: string }>("/wallet/positions", {
+    walletAddress,
+  });
+}
+
+export function fetchHealth(
+  walletAddress: string,
+  opts?: { source?: "wallet" | "portfolio"; positionIds?: string[] }
+) {
+  return post<any>("/portfolio/health", { walletAddress, ...opts });
+}
+
+export function simulateShock(walletAddress: string, asset: string, pct: number) {
+  return post<any>("/simulate/shock", { walletAddress, asset, pct });
+}
+
+export function fetchPoolDiagnose(walletAddress: string, poolId: string) {
+  return post<any>("/pool/diagnose", { walletAddress, poolId });
+}
+
+export function fetchGuardStatus(walletAddress: string) {
+  return post<any>("/guard/status", { walletAddress });
+}
+
+export function registerGuard(payload: {
+  walletAddress: string;
+  capId?: string;
+  portfolioId?: string;
+  txDigest?: string;
+}) {
+  return post<{ ok: boolean; watching: boolean; portfolioId: string; clusterToken: string | null }>(
+    "/guard/register",
+    payload
+  );
+}

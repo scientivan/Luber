@@ -45,4 +45,8 @@ export const beData = {
   async simulateShock(positions: any[], priceHistory: any, asset: string, pct: number, plan?: any): Promise<any> {
     return post("/compute/simulate-shock", { positions, priceHistory: priceArg(priceHistory), asset, pct, plan });
   },
+
+  async poolDiagnose(positions: any[], priceHistory: any, poolId: string, deepBookDepth?: any): Promise<any> {
+    return post("/compute/pool-diagnose", { positions, priceHistory: priceArg(priceHistory), poolId, deepBookDepth });
+  },
 };

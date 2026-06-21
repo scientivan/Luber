@@ -4,6 +4,7 @@ from compute.correlation import detect_cluster
 from compute.risk import compute_risk
 from compute.stress import stress_test
 from compute.simulation import simulate_shock
+from compute.pool import deep_diagnose_pool
 
 
 def test_cluster_finds_eth_bet():
@@ -70,3 +71,32 @@ def test_expected_health_range_brackets_a_projection():
     lo, hi = r["suggestedAllocation"]["expectedHealthRange"]
     assert 0 <= lo <= hi <= 100
     assert hi > lo  # a real (non-degenerate) range
+
+
+# ── deep pool diagnosis ──────────────────────────────────────────────────────
+def test_deep_diagnose_pool_returns_il_and_contribution():
+    positions = demo_positions("demo-1")
+    pool_id = positions[0]["poolId"]
+    out = deep_diagnose_pool(positions, demo_price_history(), pool_id)
+    assert out["poolId"] == pool_id
+    assert out["ilEstimatePct"] >= 0
+    assert out["ilEstimateUSD"] >= 0
+    # demo-1 is an ETH cluster; its ETH pool should contribute a positive share.
+    assert out["clusterToken"] == "ETH"
+    assert 0 <= out["clusterContributionPct"] <= 100
+
+
+def test_deep_diagnose_pool_exit_liquidity_with_depth():
+    positions = demo_positions("demo-1")
+    pool_id = positions[0]["poolId"]
+    depth = {"depthUSD": 1_000_000, "spreadBps": 10, "depthAt2Percent": 240_000}
+    out = deep_diagnose_pool(positions, demo_price_history(), pool_id, depth)
+    ex = out["exitLiquidity"]
+    assert ex["depthUSD"] == 1_000_000
+    assert ex["slippageBps"] is not None
+    assert isinstance(ex["feasible"], bool)
+
+
+def test_deep_diagnose_pool_missing_pool():
+    out = deep_diagnose_pool(demo_positions("demo-1"), demo_price_history(), "0xdoesnotexist")
+    assert "error" in out

@@ -4,10 +4,11 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { z } from "zod";
-import { config } from "./config.js";
+import { config, resolvePortfolio } from "./config.js";
 import { strategist } from "./agents/strategist.js";
 import { scout } from "./agents/scout.js";
 import { watcher } from "./agents/watcher.js";
+import { pythClient } from "./services/pythClient.js";
 import * as supabaseService from "./services/supabaseService.js";
 import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import type { PortfolioHealth, ShockResult, HistoryItem } from "@lp-guardian/core";
@@ -118,7 +119,7 @@ app.post("/portfolio/history", async (c) => {
 
   const history: { items: HistoryItem[]; webLink: string } = {
     items,
-    webLink: `${config.beDataUrl.replace("8000", "5173")}/history/${walletAddress}`
+    webLink: `${config.webBase}/history/${walletAddress}`
   };
   return c.json(history);
 });
@@ -138,13 +139,119 @@ app.post("/auth/verify", async (c) => {
   }
 });
 
-// POST /simulate/shock - Simulate asset drop
+// POST /simulate/shock - Simulate asset drop. Discovers the wallet's REAL mainnet
+// positions first so the shock is computed on the SAME positions the diagnosis saw
+// (falls through to the demo portfolio when the wallet holds no real positions).
 const shockSchema = z.object({ walletAddress: z.string(), asset: z.string(), pct: z.number() });
 app.post("/simulate/shock", async (c) => {
   const body = await c.req.json();
   const { walletAddress, asset, pct } = shockSchema.parse(body);
-  const sim: ShockResult = await strategist.simulate(walletAddress, asset, pct);
+  const positions = await scout.discoverWalletPositions(walletAddress).catch(() => []);
+  const sim: ShockResult = positions.length
+    ? await strategist.simulate(walletAddress, asset, pct, { positions })
+    : await strategist.simulate(walletAddress, asset, pct);
   return c.json(sim);
+});
+
+// POST /pool/diagnose - Deep-dive one pool (IL + exit-liquidity + cluster contribution).
+const poolDiagnoseSchema = z.object({
+  walletAddress: z.string(),
+  poolId: z.string(),
+  source: z.enum(["wallet", "portfolio"]).optional(),
+  positionIds: z.array(z.string()).optional(),
+});
+app.post("/pool/diagnose", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress, poolId, source, positionIds } = poolDiagnoseSchema.parse(body);
+
+  let opts: { positions?: PortfolioHealth["positions"] } | undefined;
+  if (source !== "portfolio") {
+    let positions = await scout.discoverWalletPositions(walletAddress).catch(() => []);
+    if (positionIds && positionIds.length) {
+      positions = positions.filter((p) => positionIds.includes(p.objectId));
+    }
+    if (positions.length > 0) opts = { positions };
+  }
+
+  const result = await strategist.deepDiagnosePool(walletAddress, poolId, opts);
+  return c.json(result);
+});
+
+// POST /guard/status - Current autonomous Guard state for a wallet (for MCP + web).
+const guardStatusSchema = z.object({ walletAddress: z.string() });
+app.post("/guard/status", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress } = guardStatusSchema.parse(body);
+
+  const guardConfig = await supabaseService.getGuardConfig(walletAddress).catch(() => null);
+  const baselinePrices = await supabaseService.getBaselinePrices(walletAddress).catch(() => ({}));
+  const raw = await supabaseService.getHistory(walletAddress, 5).catch(() => [] as any[]);
+  const recentActivity = raw.map((e: any) => ({
+    type:
+      e.event_type === "rebalance"
+        ? "autonomous_save"
+        : e.event_type === "manual_rebalance"
+        ? "fix"
+        : e.event_type === "guard_armed"
+        ? "guard_armed"
+        : "diagnosis",
+    timestamp: e.created_at,
+    summary:
+      e.event_type === "rebalance"
+        ? `Rebalanced ${e.details?.asset ?? "cluster"} — saved ~$${Math.round(e.details?.moneySaved || 0)}`
+        : e.event_type === "threshold_breach"
+        ? `${e.details?.asset} dropped ${Math.abs(e.details?.dropPct ?? 0).toFixed(2)}%`
+        : e.event_type === "guard_armed"
+        ? "Guard armed (StrategistCap minted)"
+        : e.event_type,
+    moneySaved: e.details?.moneySaved,
+    txDigest: e.details?.txDigest,
+  }));
+
+  return c.json({
+    walletAddress,
+    guardEnabled: guardConfig?.guardEnabled ?? false,
+    thresholdPct: guardConfig?.thresholdPct ?? config.watcher.thresholdPct,
+    lastCheckAt: guardConfig?.lastCheckAt ?? null,
+    watching: watcher.isArmed(walletAddress),
+    clusterToken: watcher.clusterTokenFor(walletAddress) ?? null,
+    baselinePrices,
+    recentActivity,
+    webLink: `${config.webBase}/guard/${walletAddress}`,
+  });
+});
+
+// POST /guard/register - Called by the web app AFTER the owner signs the cap mint.
+// Persists baseline prices, enables guard, and arms the live watcher.
+const guardRegisterSchema = z.object({
+  walletAddress: z.string(),
+  capId: z.string().optional(),
+  portfolioId: z.string().optional(),
+  txDigest: z.string().optional(),
+});
+app.post("/guard/register", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress, capId, txDigest } = guardRegisterSchema.parse(body);
+  const portfolioId = body.portfolioId || resolvePortfolio(walletAddress).portfolioId;
+
+  // Baseline = current prices of the wallet's cluster tokens, so the watcher can
+  // detect a future drop vs this moment.
+  const health = await strategist.diagnose(walletAddress).catch(() => null);
+  const uniqueTokens = Array.from(
+    new Set((health?.positions || []).map((p) => p.token).filter(Boolean))
+  ) as string[];
+  const prices = uniqueTokens.length
+    ? await pythClient.getCurrentPrices(uniqueTokens).catch(() => ({}))
+    : {};
+
+  await supabaseService.setBaselinePrices(walletAddress, portfolioId, prices).catch(console.error);
+  await supabaseService.toggleGuard(walletAddress, true).catch(console.error);
+  watcher.arm(walletAddress, capId);
+  await supabaseService
+    .logEvent(walletAddress, portfolioId, "guard_armed", { txDigest, capId })
+    .catch(console.error);
+
+  return c.json({ ok: true, watching: true, portfolioId, clusterToken: health?.cluster.token ?? null });
 });
 
 // POST /portfolio/rebalance - One-signature Fix: agent signs the rebalance + mints report

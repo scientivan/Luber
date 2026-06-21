@@ -151,6 +151,18 @@ const TOOLS = [
       required: ["walletAddress"],
     },
   },
+  {
+    name: "guard_status",
+    description:
+      "Check the current status of autonomous Guard for a wallet: whether it's armed/enabled, the drop threshold it watches, which correlation cluster token it's protecting, and recent autonomous saves. Use when the user asks 'is my guard on?', 'what's protecting me?', 'guard status', or 'what has Guard done lately?'.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        walletAddress: { type: "string" },
+      },
+      required: ["walletAddress"],
+    },
+  },
 ];
 // ─── Tool handlers ───────────────────────────────────────────────────────────
 
@@ -217,29 +229,30 @@ async function handleTool(name: string, args: Record<string, unknown>) {
       if (!poolId || !isValidSuiAddress(poolId)) {
         return errorResult("That doesn't look like a valid pool ID.");
       }
-      const data: any = await apiPost("/portfolio/health", {
+      const data: any = await apiPost("/pool/diagnose", {
         walletAddress: addr,
+        poolId,
       });
-      const pool = (data.positions || []).find(
-        (p: any) => p.poolId === poolId
-      );
-      if (!pool) {
-        return errorResult(
-          `Pool ${poolId} not found in this wallet's positions.`
-        );
-      }
+      const ex = data.exitLiquidity || {};
       const text = [
-        `Pool: ${pool.pair} (${pool.protocol})`,
-        `Status: ${pool.inRange ? "In range" : `Out of range for ${pool.daysOutOfRange ?? "?"} days`}`,
-        `Value: $${Math.round(pool.valueUSD)}`,
-        pool.isDust ? "⚠ This is a dust position (gas > value)." : "",
+        `Pool: ${data.pair} (${data.protocol})`,
+        `Status: ${data.inRange ? "In range" : `Out of range for ${data.daysOutOfRange ?? "?"} days`}`,
+        `Value: $${Math.round(data.valueUSD).toLocaleString()}`,
+        `Impermanent loss: ~${data.ilEstimatePct}% (≈$${Math.round(data.ilEstimateUSD).toLocaleString()})`,
+        data.inCluster
+          ? `Cluster: contributes ${data.clusterContributionPct}% of your ${data.clusterToken} cluster.`
+          : `Cluster: not part of the dominant ${data.clusterToken} cluster.`,
+        ex.depthUSD != null
+          ? `Exit liquidity: DeepBook depth ~$${Math.round(ex.depthUSD).toLocaleString()}, ~${ex.slippageBps} bps slippage — ${ex.feasible ? "exit is feasible" : "thin, exit may slip"}.`
+          : "Exit liquidity: no DeepBook depth available.",
+        data.isDust ? "⚠ This is a dust position (gas > value)." : "",
       ]
         .filter(Boolean)
         .join("\n");
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: {
-          ...pool,
+          ...data,
           webLink: `${WEB}/d/${addr}/pool/${poolId}?s=preview`,
         },
       };
@@ -301,6 +314,41 @@ async function handleTool(name: string, args: Record<string, unknown>) {
         `To arm Guard, sign once here — you mint a revocable capability; I still physically can't withdraw your funds (enforced by Move): ${webLink}`,
         { action: "mint_strategist_cap", webLink }
       );
+    }
+
+    case "guard_status": {
+      const data: any = await apiPost("/guard/status", { walletAddress: addr });
+      const webLink = `${WEB}/guard/${addr}`;
+      if (!data.guardEnabled && !data.watching) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Guard is OFF for this wallet. Arm it here to protect your cluster autonomously: ${webLink}`,
+            },
+          ],
+          structuredContent: { ...data, webLink },
+        };
+      }
+      const recent = (data.recentActivity || [])
+        .slice(0, 3)
+        .map(
+          (a: any) =>
+            `  • [${a.type}] ${a.summary}${a.moneySaved ? ` (saved ~$${Math.round(a.moneySaved)})` : ""}`
+        );
+      const text = [
+        `🛡️ Guard is ${data.guardEnabled ? "ON" : "OFF"}${data.watching ? " · watching live" : ""}.`,
+        data.clusterToken ? `Protecting your ${data.clusterToken} cluster.` : "",
+        `Triggers an autonomous rebalance if it drops ${Math.abs(data.thresholdPct)}%.`,
+        data.lastCheckAt ? `Last checked: ${new Date(data.lastCheckAt).toLocaleString()}` : "",
+        recent.length ? `Recent activity:\n${recent.join("\n")}` : "No saves yet — all quiet.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: { ...data, webLink },
+      };
     }
 
     default:

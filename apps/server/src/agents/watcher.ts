@@ -35,6 +35,14 @@ class Watcher {
   disarm(walletAddress: string) {
     this.guarded.delete(walletAddress);
   }
+  /** Is this wallet currently armed in the live watcher (in-memory)? */
+  isArmed(walletAddress: string): boolean {
+    return this.guarded.has(walletAddress);
+  }
+  /** Cluster token cached for an armed wallet (if discovered yet). */
+  clusterTokenFor(walletAddress: string): string | undefined {
+    return this.guarded.get(walletAddress)?.clusterToken;
+  }
   subscribe(fn: Subscriber) {
     this.subscribers.add(fn);
     return () => this.subscribers.delete(fn);

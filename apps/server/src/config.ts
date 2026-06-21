@@ -3,6 +3,8 @@ import "dotenv/config";
 export const config = {
   port: Number(process.env.PORT ?? 8787),
   beDataUrl: process.env.BE_DATA_URL ?? "http://localhost:8000",
+  // Public base URL of the web app, used to build deep-links returned to MCP/clients.
+  webBase: process.env.LPG_WEB_BASE ?? "http://localhost:3100",
 
   sui: {
     network: (process.env.SUI_NETWORK ?? "testnet") as "testnet" | "mainnet" | "devnet",
