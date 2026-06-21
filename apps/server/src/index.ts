@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -8,8 +9,10 @@ import { strategist } from "./agents/strategist.js";
 import { watcher } from "./agents/watcher.js";
 import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import type { PortfolioHealth, ShockResult, HistoryItem } from "@lp-guardian/core";
+import { wsHandler } from "./websocket/wsHandler.js";
 
 const app = new Hono();
+const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
 // Middleware
 app.use("*", cors());
@@ -21,6 +24,33 @@ app.onError((err, c) => {
   return c.json({ error: err.message || "Internal server error" }, 500);
 });
 
+
+// --- WebSocket Setup ---------------------------------------------------------
+app.get(
+  "/ws",
+  upgradeWebSocket((c: any) => {
+    // Optional: get wallet from query param for MVP
+    const walletAddress = c.req.query("wallet");
+    
+    return {
+      onOpen: (event: any, ws: any) => {
+        wsHandler.register(ws, walletAddress);
+        wsHandler.startHeartbeat();
+      },
+      onMessage: (event: any, ws: any) => {
+        const msg = typeof event.data === 'string' ? event.data : event.data.toString();
+        if (msg === "pong") wsHandler.handlePong(ws);
+      },
+      onClose: (event: any, ws: any) => {
+        wsHandler.unregister(ws);
+      },
+      onError: (error: any, ws: any) => {
+        console.error("[ws] Connection error:", error);
+        wsHandler.unregister(ws);
+      }
+    };
+  })
+);
 // --- Routes ------------------------------------------------------------------
 
 app.get("/health", (c) => c.json({ ok: true, mockMode: config.mockMode }));
@@ -96,7 +126,7 @@ app.post("/watcher/trigger-shock", async (c) => {
 });
 
 // Start the server
-serve({
+const server = serve({
   fetch: app.fetch,
   port: config.port,
 }, (info) => {
@@ -105,3 +135,5 @@ serve({
   // Start watcher daemon
   watcher.start();
 });
+
+injectWebSocket(server);

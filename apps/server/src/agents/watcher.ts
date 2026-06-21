@@ -10,6 +10,7 @@ import { config, resolvePortfolio } from "../config.js";
 import { strategist, buildPlanFromAllocation } from "./strategist.js";
 import { pythClient } from "../services/pythClient.js";
 import * as supabaseService from "../services/supabaseService.js";
+import { wsHandler } from "../websocket/wsHandler.js";
 
 export type SaveEvent =
   | { kind: "trigger"; asset: string; pct: number; text: string }
@@ -125,12 +126,16 @@ class Watcher {
     const guard = this.guarded.get(walletAddress);
     if (!guard) return;
 
-    this.emit({ kind: "trigger", asset, pct, text: `⚠️ ${asset} just dropped ${Math.abs(pct)}%. Your cluster is bleeding. Acting now.` });
+    const triggerEvent = { kind: "trigger" as const, asset, pct, text: `⚠️ ${asset} just dropped ${Math.abs(pct)}%. Your cluster is bleeding. Acting now.` };
+    this.emit(triggerEvent);
+    wsHandler.broadcast("threshold_breach", { walletAddress, ...triggerEvent });
 
     // Diagnose now to get the REAL cluster + allocation, then build a real plan.
     const health = await strategist.diagnose(walletAddress);
     const sim = await strategist.simulate(walletAddress, asset, pct);
-    this.emit({ kind: "acting", text: "Rebalancing the correlated cluster via DeepBook…" });
+    const actingEvent = { kind: "acting" as const, text: "Rebalancing the correlated cluster via DeepBook…" };
+    this.emit(actingEvent);
+    wsHandler.broadcast("rebalance_start", { walletAddress, ...actingEvent });
 
     const plan = buildPlanFromAllocation(health);
     const { txDigest, explorer } = await strategist.executeRebalance(guard.capId, guard.portfolioId, plan);
@@ -152,13 +157,15 @@ class Watcher {
     }
 
     const targetPct = health.suggestedAllocation?.allocations.find((a) => a.token === health.cluster.token)?.targetPct ?? 40;
-    this.emit({
-      kind: "done",
+    const doneEvent = {
+      kind: "done" as const,
       text: `✅ I cut your ${health.cluster.token} exposure from ${Math.round(health.cluster.exposurePct)}% to ${Math.round(targetPct)}% — into uncorrelated assets via DeepBook. I just saved you about $${Math.round(sim.guarded.moneySaved)} of that drop.`,
       txDigest,
       explorer,
       moneySaved: sim.guarded.moneySaved,
-    });
+    };
+    this.emit(doneEvent);
+    wsHandler.broadcast("rebalance_complete", { walletAddress, ...doneEvent });
   }
 }
 
