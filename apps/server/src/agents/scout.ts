@@ -1,7 +1,8 @@
-import type { Position } from "@lp-guardian/core";
+﻿import type { Position } from "@lp-guardian/core";
 import { config, resolvePortfolio } from "../config.js";
 import { suiClient } from "../chain/suiClient.js";
 import { DEMO_POSITIONS } from "../services/mockData.js";
+import { deepbookClient } from "../services/deepbookClient.js";
 
 /**
  * Canonical token for correlation/pricing. ETH-family wrappers collapse to ETH so
@@ -16,7 +17,7 @@ export function canonicalToken(sym: string): string {
 }
 
 /**
- * Scout — discovers all LP positions for a wallet as Sui on-chain objects,
+ * Scout â€” discovers all LP positions for a wallet as Sui on-chain objects,
  * enriches them using public DEX REST APIs (Cetus/Turbos), and pulls historical
  * price feeds for correlation analysis.
  */
@@ -35,7 +36,7 @@ export const scout = {
       const dfRes = await suiClient.getDynamicFields({ parentId: portfolioId });
       
       // Position objects are stored with numeric keys (0, 1, 2, ...). Sort by that
-      // key so our array index matches the on-chain dof index — `rebalance` applies
+      // key so our array index matches the on-chain dof index â€” `rebalance` applies
       // new_value_usd[j] to position[j], so order MUST be deterministic.
       const positionDFs = dfRes.data
         .filter(df =>
@@ -80,7 +81,11 @@ export const scout = {
             if (tickLower !== 0 || tickUpper !== 0) {
               pos.inRange = currentTick >= tickLower && currentTick <= tickUpper;
             }
-          }
+          }        } else if (pos.protocol === "deepbook") {
+          const dbData = await deepbookClient.getLiquidityProfile(pos.poolId, pos.tokenX, pos.tokenY);
+          (pos as any).deepBookData = dbData;
+          // For DeepBook, a very wide spread implies poor liquidity/unhealthy pool
+          if (dbData.spreadBps > 100) pos.inRange = false;
         }
       }
 
@@ -93,8 +98,8 @@ export const scout = {
 
   /**
    * Fetch historical prices from Pyth Benchmarks TV Shim, keyed by CANONICAL
-   * symbol (WETH/stETH → ETH) so the keys line up with `position.token`. Returns
-   * `{}` when nothing usable is found — BE Data then sources prices itself and
+   * symbol (WETH/stETH â†’ ETH) so the keys line up with `position.token`. Returns
+   * `{}` when nothing usable is found â€” BE Data then sources prices itself and
    * labels the provenance (we never silently substitute fake numbers here).
    */
   async priceHistory(tokens: string[]): Promise<Record<string, number[]>> {
@@ -113,7 +118,7 @@ export const scout = {
         const prices = await fetchPythHistoricalPrices(symbol, fromTimestamp, toTimestamp);
         if (prices.length > 0) history[symbol] = prices;
       }
-      return history; // may be {} — BE Data fills + labels it
+      return history; // may be {} â€” BE Data fills + labels it
     } catch (err) {
       console.error("[scout] failed to fetch real price history; BE Data will source it:", err);
       return {};
@@ -146,7 +151,7 @@ function mapObjectToPosition(obj: any): Position | null {
     pair: `${tokenX}-${tokenY}`,
     tokenX,
     tokenY,
-    token: canonicalToken(tokenX), // primary token for clustering (WETH/stETH → ETH)
+    token: canonicalToken(tokenX), // primary token for clustering (WETH/stETH â†’ ETH)
     valueUSD: Number(fields.value_usd || 0),
     inRange: true, // Default true, enriched later
     daysOutOfRange: 0,
