@@ -310,7 +310,8 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * there is no session to track and any client can connect at any time.
  */
 async function runHttp() {
-  const port = Number(process.env.MCP_PORT ?? 8765);
+  // Railway/Render/etc. inject PORT; prefer MCP_PORT, then PORT, then default.
+  const port = Number(process.env.MCP_PORT ?? process.env.PORT ?? 8765);
 
   const http = createHttpServer(async (req, res) => {
     // Permissive CORS so browser-based MCP hosts can connect too.
