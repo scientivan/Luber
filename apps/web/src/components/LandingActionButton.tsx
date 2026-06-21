@@ -3,7 +3,7 @@ import { type ButtonHTMLAttributes, type ReactNode } from "react";
 
 interface LandingActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
-  tone?: "dark" | "yellow";
+  tone?: "dark" | "yellow" | "blue";
   size?: "hero" | "follow";
 }
 

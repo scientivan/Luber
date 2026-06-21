@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -10,6 +10,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { HoverGridBackground } from "../components/HoverGridBackground";
 import "../styles/docs.css";
 
 const requirements = [
@@ -28,35 +29,49 @@ const clients = [
   "Other MCP-compatible clients",
 ] as const;
 
+const hostedUrl = "https://lpguardian-sui-mcp-production.up.railway.app/mcp";
+
 const installSteps = [
-  ["Clone repository", "git clone <repository-url>\ncd Luber"],
-  ["Install workspace", "pnpm install"],
-  ["Build MCP server", "pnpm build:mcp"],
-  ["Run MCP server", "pnpm dev:mcp"],
+  ["Option A — Hosted (no install)", `# Paste this into your mcp_config.json\n# No cloning or building required.`],
+  ["Option B — Self-hosted (Claude Desktop / Cursor)", "git clone <repository-url>\ncd Luber\npnpm install\npnpm build:mcp"],
 ] as const;
 
-const mcpConfig = `{
+const mcpConfigHosted = `{
   "mcpServers": {
-    "Luber": {
-      "command": "node",
-      "args": ["/absolute/path/to/Luber/apps/mcp-server/dist/server.js"],
-      "env": {
-        "LPG_API_BASE": "http://localhost:8787",
-        "LPG_WEB_BASE": "http://localhost:5173"
-      }
+    "luber": {
+      "type": "http",
+      "url": "${hostedUrl}"
     }
   }
 }`;
 
-const verifyToolCall = `diagnose_portfolio
+const mcpConfigLocal = `{
+  "mcpServers": {
+    "luber": {
+      "command": "node",
+      "args": ["/absolute/path/to/Luber/apps/mcp-server/dist/server.js"]
+    }
+  }
+}`;
+
+const verifyToolCall = `discover_positions
 walletAddress: 0x8a4...92f`;
 
 const tools = [
   {
+    name: "discover_positions",
+    purpose: "Find real Cetus LP positions held by a Sui wallet from mainnet. Use this FIRST before diagnosing.",
+    params: [
+      ["walletAddress", "string", "yes", "Sui wallet address (0x...)"],
+    ],
+  },
+  {
     name: "diagnose_portfolio",
-    purpose: "Run a full portfolio health diagnosis for a Sui wallet.",
+    purpose: "Run a full portfolio health diagnosis. Shows correlation cluster, health score, stress-test, and suggested allocation.",
     params: [
       ["walletAddress", "string", "yes", "Sui wallet address to diagnose"],
+      ["source", "enum", "no", "'wallet' = real on-chain positions; 'portfolio' (default) = demo portfolio"],
+      ["positionIds", "array", "no", "Subset of position objectIds from discover_positions to diagnose"],
     ],
   },
   {
@@ -89,6 +104,11 @@ const tools = [
     purpose: "Open web link to mint revocable Guard capability with wallet approval.",
     params: [["walletAddress", "string", "yes", "Wallet to arm Guard for"]],
   },
+  {
+    name: "guard_status",
+    purpose: "Check autonomous Guard status: whether armed, drop threshold, protected token, and recent saves.",
+    params: [["walletAddress", "string", "yes", "Wallet to check Guard status for"]],
+  },
 ] as const;
 
 const securityRules = [
@@ -119,10 +139,12 @@ const troubleshooting = [
 ] as const;
 
 const prompts = [
+  "Show me LP positions for wallet 0x...",
   "Diagnose my Sui LP portfolio for wallet 0x...",
   "Deep-dive on pool 0x... from my latest diagnosis.",
   "Simulate what happens if SUI drops 10%.",
   "Summarize my previous Luber diagnosis history.",
+  "Check Guard status for wallet 0x...",
   "Open Guard setup for wallet 0x...",
 ] as const;
 
@@ -200,6 +222,7 @@ const docsSections = [
 
 export function Docs() {
   const [activeSection, setActiveSection] = useState<(typeof docsSections)[number][0]>("intro");
+  const heroRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const sections = docsSections
@@ -250,25 +273,32 @@ export function Docs() {
         <nav aria-label="Docs navigation">
           <a href="#intro">Overview</a>
           <a href="#installation">Install MCP</a>
-          <a href="#tools">Docs</a>
-          <a href="#security">How It Works</a>
+          <Link to="/history">History</Link>
+          <Link to="/status">Status</Link>
           <Link to="/">
             Launch App <ArrowUpRight aria-hidden="true" />
           </Link>
         </nav>
       </header>
 
-      <section className="docs-hero docs-grid-paper" id="intro">
+      <section className="docs-hero" id="intro" ref={heroRef} style={{ position: "relative", overflow: "hidden" }}>
+        <HoverGridBackground
+          className="hover-grid-background"
+          gridClassName="hover-grid-background-canvas"
+          squareSize={56}
+          borderColor="var(--docs-grid)"
+          trailLength={8}
+          targetRef={heroRef}
+        />
         <div className="docs-kicker">
           <BookOpen aria-hidden="true" /> MCP + Sui LP Risk Docs
         </div>
         <h1>Install MCP. Diagnose with agent. Approve with wallet.</h1>
         <p>
-          Model Context Protocol lets AI clients connect to external tools and data sources through a standardized interface.
-          Luber uses MCP so compatible AI Agents can diagnose Sui LP positions without requiring users to expose private keys.
+          Add our hosted MCP URL to your AI client to immediately gain access to seven tools: discover, diagnose, deep-dive, simulate, and guard your Sui LP positions.
         </p>
         <p className="docs-security-note">
-          MCP tools can diagnose positions, but transaction execution happens through web app flow and still requires explicit Sui Wallet approval.
+          The agent only reads data. All transactions are signed safely in the web app with explicit wallet approval.
         </p>
         <div className="docs-hero-actions">
           <a href="#installation">
@@ -283,18 +313,18 @@ export function Docs() {
       <section className="docs-map" aria-label="Documentation map">
         <article>
           <Code2 aria-hidden="true" />
-          <b>MCP Server</b>
-          <span>Expose portfolio diagnosis, deep pool diagnosis, shock simulation, history, and Guard setup.</span>
+          <b>Discover &rarr; Diagnose &rarr; Deep-dive</b>
+          <span>Agent discovers real positions on Sui mainnet, user picks which to diagnose, then picks a pool for deep analysis. Results open in the web app.</span>
         </article>
         <article>
           <ShieldCheck aria-hidden="true" />
-          <b>Evidence Path</b>
-          <span>Return structured risk output, validated inputs, technical metadata, and report provenance links.</span>
+          <b>Simulate &amp; Guard</b>
+          <span>Simulate price shocks across the portfolio. Activate autonomous Guard via a signed web transaction that monitors and saves positions automatically.</span>
         </article>
         <article>
           <WalletCards aria-hidden="true" />
           <b>Wallet Gate</b>
-          <span>Diagnosis stays read-only until user chooses web flow and approves transaction in wallet.</span>
+          <span>Web app validates that the connected wallet matches the address used in diagnosis before showing results or executing any transaction.</span>
         </article>
       </section>
 
@@ -345,16 +375,18 @@ export function Docs() {
               <span>02 / INSTALLATION</span>
               <CheckCircle2 aria-hidden="true" />
             </div>
-            <h2>Install from repository today.</h2>
-            <p>Workspace commands stay source-of-truth until packaged binary exists.</p>
-            <div className="docs-step-list">
-              {installSteps.map(([title, code], index) => (
-                <article key={title}>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <h3>{title}</h3>
-                  <CopyBlock code={code} language="bash" />
-                </article>
-              ))}
+            <h2>Add the connector. Your agent is ready.</h2>
+            <p>Paste the MCP connector URL into your AI client config. No MCP server build required — the connector is already running.</p>
+            <CopyBlock code={hostedUrl} language="url" />
+            <div className="docs-two-col">
+              <div className="docs-cell-block">
+                <h3>Option A — Hosted connector</h3>
+                <p style={{ marginTop: 8, color: "inherit", fontSize: "0.96rem", fontWeight: 720 }}>Add the connector URL to your <code>mcp_config.json</code>. Works with Claude Code and any client supporting HTTP transport.</p>
+              </div>
+              <div className="docs-cell-block">
+                <h3>Option B — Self-hosted</h3>
+                <p style={{ marginTop: 8, color: "inherit", fontSize: "0.96rem", fontWeight: 720 }}>Clone the repo, run <code>pnpm install &amp;&amp; pnpm build:mcp</code>, and run the MCP server yourself with the backend.</p>
+              </div>
             </div>
           </section>
 
@@ -364,20 +396,29 @@ export function Docs() {
               <CheckCircle2 aria-hidden="true" />
             </div>
             <h2>Register Luber in <code>mcp_config.json</code>.</h2>
-            <p>Add server entry, restart AI client, then confirm Luber shows up in available MCP tools.</p>
-            <CopyBlock code={mcpConfig} language="json" />
+            <p>Add the server entry below, restart your AI client, then confirm Luber tools appear.</p>
+            <div className="docs-two-col docs-notes-grid">
+              <div className="docs-callout">
+                <h3>Hosted — HTTP transport</h3>
+                <CopyBlock code={mcpConfigHosted} language="json" />
+              </div>
+              <div className="docs-callout">
+                <h3>Self-hosted — stdio</h3>
+                <CopyBlock code={mcpConfigLocal} language="json" />
+              </div>
+            </div>
             <div className="docs-two-col docs-notes-grid">
               <div className="docs-callout">
                 <h3>Config notes</h3>
                 <ul>
                   <li>Config file location depends on client.</li>
-                  <li>Use absolute path to built server file.</li>
+                  <li>For self-hosted, use absolute path to the built server file.</li>
                   <li>Restart client after config changes.</li>
                 </ul>
               </div>
               <div className="docs-callout">
                 <h3>Quick verification</h3>
-                <p>Run one simple tool call after restart.</p>
+                <p>Run this tool call after restart to confirm the connection works.</p>
                 <CopyBlock code={verifyToolCall} />
               </div>
             </div>
@@ -385,11 +426,11 @@ export function Docs() {
 
           <section className="docs-panel" id="tools">
             <div className="docs-panel-top">
-              <span>04 / AGENT CAPABILITIES</span>
+              <span>04 / AGENT CAPABILITIES &amp; FLOW</span>
               <CheckCircle2 aria-hidden="true" />
             </div>
-            <h2>MCP exposes diagnosis, not custody.</h2>
-            <p>Tool list below matches current MCP server implementation.</p>
+            <h2>Seven tools. One guided flow.</h2>
+            <p>The agent follows a structured sequence: discover positions on-chain → diagnose portfolio-level risk → deep-dive into a flagged pool → optionally simulate a price shock or activate autonomous Guard. All transaction signing happens on the web app, never in the agent.</p>
             <div className="docs-tool-list">
               {tools.map((tool) => (
                 <ToolTable key={tool.name} name={tool.name} purpose={tool.purpose} params={tool.params} />

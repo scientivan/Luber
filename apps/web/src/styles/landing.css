@@ -1659,3 +1659,12 @@
 .of-nav-item:hover .of-nav-text {
   transform: translateX(6px);
 }
+.of-action-button-blue {
+  background: var(--of-blue);
+  color: var(--of-ink) !important;
+  box-shadow: 6px 6px 0 var(--of-ink);
+}
+.of-action-button-blue .of-action-button-icon {
+  background: var(--of-ink);
+  color: var(--of-paper);
+}
