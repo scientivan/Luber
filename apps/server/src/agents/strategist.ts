@@ -13,7 +13,7 @@ import { buildRebalanceTx, buildHealthReportTx } from "../chain/moveCalls.js";
 const riskToU8 = (r: RiskLevel) => (r === "green" ? 0 : r === "amber" ? 1 : 2);
 
 /**
- * Strategist â€” the portfolio brain + the on-chain signer. Calls BE Data for
+ * Strategist — the portfolio brain + the on-chain signer. Calls BE Data for
  * correlation/risk, assembles the diagnose payload, and (for Fix/Guard) signs
  * PTBs via the StrategistCap.
  */
@@ -57,13 +57,19 @@ export const strategist = {
       const txDigest = "0xMOCK_REBALANCE_" + plan.planId;
       return { txDigest, explorer: explorerTx(txDigest) };
     }
+
+    // Extract target pools and new valuations from the plan
+    const targetPools = plan.steps.map(s => s.parameters.poolId as string).filter(Boolean);
+    const newValueUsd = plan.steps.map(s => Number(s.parameters.valueUsd || 0));
+
     const tx = buildRebalanceTx({
+      portfolioId: config.sui.portfolioId,
       capId,
-      targetPool: config.sui.portfolioId,
+      targetPools,
+      newValueUsd,
       slippageBps: 80,
-      maxSlippageBps: 100,
-      plan,
     });
+
     const res = await suiClient.signAndExecuteTransaction({
       signer: strategistKeypair(),
       transaction: tx,
@@ -74,13 +80,26 @@ export const strategist = {
   /** Persist the analysis as an immutable HealthReport (audit trail). */
   async mintReport(capId: string, health: PortfolioHealth): Promise<{ txDigest: string }> {
     if (config.mockMode) return { txDigest: "0xMOCK_REPORT" };
+
+    // Serialize the suggested allocation as a JSON string
+    const allocation = health.suggestedAllocation 
+      ? JSON.stringify(health.suggestedAllocation.allocations)
+      : "[]";
+
     const tx = buildHealthReportTx({
+      portfolioId: config.sui.portfolioId,
       capId,
       score: health.healthScore,
       riskLevel: riskToU8(health.riskLevel),
       insights: health.insights.map((i) => i.title).join("; "),
+      allocation,
+      confidence: Math.round((health.suggestedAllocation?.confidence || 0.5) * 100),
     });
-    const res = await suiClient.signAndExecuteTransaction({ signer: strategistKeypair(), transaction: tx });
+
+    const res = await suiClient.signAndExecuteTransaction({ 
+      signer: strategistKeypair(), 
+      transaction: tx 
+    });
     return { txDigest: res.digest };
   },
 };

@@ -1,0 +1,98 @@
+import { serve } from "@hono/node-server";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
+import { z } from "zod";
+import { config } from "./config.js";
+import { strategist } from "./agents/strategist.js";
+import { watcher } from "./agents/watcher.js";
+import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
+import type { PortfolioHealth, ShockResult, HistoryItem } from "@lp-guardian/core";
+
+const app = new Hono();
+
+// Middleware
+app.use("*", cors());
+app.use("*", logger());
+
+// Error handler
+app.onError((err, c) => {
+  console.error("[server error]", err);
+  return c.json({ error: err.message || "Internal server error" }, 500);
+});
+
+// --- Routes ------------------------------------------------------------------
+
+app.get("/health", (c) => c.json({ ok: true, mockMode: config.mockMode }));
+
+// POST /portfolio/health - Diagnose portfolio
+const diagnoseSchema = z.object({ walletAddress: z.string() });
+app.post("/portfolio/health", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress } = diagnoseSchema.parse(body);
+  const health: PortfolioHealth = await strategist.diagnose(walletAddress);
+  return c.json(health);
+});
+
+// POST /portfolio/history - Get activity history
+const historySchema = z.object({ walletAddress: z.string(), filter: z.string().optional() });
+app.post("/portfolio/history", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress } = historySchema.parse(body);
+  
+  // Return mock history for demo purposes
+  const history: { items: HistoryItem[]; webLink: string } = {
+    items: [
+      { id: "h1", type: "autonomous_save", level: "portfolio", timestamp: new Date(Date.now() - 3600000).toISOString(), summary: "Cut ETH cluster 87%→40% after -4% shock", moneySaved: 1200, txDigest: "0xMockSave123" },
+      { id: "h2", type: "diagnosis", level: "portfolio", timestamp: new Date(Date.now() - 86400000).toISOString(), summary: "Health 42/100, 87% ETH cluster" }
+    ],
+    webLink: `${config.beDataUrl.replace("8000", "5173")}/history/${walletAddress}`
+  };
+  return c.json(history);
+});
+
+// POST /auth/verify - Verify signMessage ownership
+const verifySchema = z.object({ message: z.string(), signature: z.string(), walletAddress: z.string() });
+app.post("/auth/verify", async (c) => {
+  const body = await c.req.json();
+  const { message, signature, walletAddress } = verifySchema.parse(body);
+  try {
+    const publicKey = await verifyPersonalMessageSignature(new TextEncoder().encode(message), signature);
+    const derivedAddress = publicKey.toSuiAddress();
+    return c.json({ valid: derivedAddress === walletAddress });
+  } catch (err) {
+    console.error("[auth error]", err);
+    return c.json({ valid: false });
+  }
+});
+
+// POST /simulate/shock - Simulate asset drop
+const shockSchema = z.object({ walletAddress: z.string(), asset: z.string(), pct: z.number() });
+app.post("/simulate/shock", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress, asset, pct } = shockSchema.parse(body);
+  const sim: ShockResult = await strategist.simulate(walletAddress, asset, pct);
+  return c.json(sim);
+});
+
+// POST /watcher/trigger-shock - Manual trigger for autonomous guard demo
+app.post("/watcher/trigger-shock", async (c) => {
+  const body = await c.req.json();
+  const { walletAddress, asset, pct } = shockSchema.parse(body);
+  // Ensure the watcher tracks this address
+  watcher.arm(walletAddress, "0xMOCK_CAP_ID");
+  // Trigger async but don't wait for completion
+  watcher.fireShock(walletAddress, asset, pct).catch(console.error);
+  return c.json({ success: true, message: `Shock triggered for ${walletAddress}` });
+});
+
+// Start the server
+serve({
+  fetch: app.fetch,
+  port: config.port,
+}, (info) => {
+  console.log(`[BE Agent] API Server running on http://localhost:${info.port}`);
+  if (config.mockMode) console.log(`[BE Agent] Running in MOCK MODE`);
+  // Start watcher daemon
+  watcher.start();
+});
