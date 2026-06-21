@@ -1,10 +1,12 @@
 ﻿import "dotenv/config";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { createServer as createHttpServer, type IncomingMessage } from "node:http";
 
 const API = process.env.LPG_API_BASE ?? "http://localhost:8787";
 const WEB = process.env.LPG_WEB_BASE ?? "http://localhost:5173";
@@ -251,37 +253,125 @@ async function handleTool(name: string, args: Record<string, unknown>) {
 
 // ─── Server setup ────────────────────────────────────────────────────────────
 
-const server = new Server(
-  { name: "lp-guardian", version: "0.1.0" },
-  { capabilities: { tools: {} } }
-);
+/** Builds a fresh MCP server instance with all tools wired up. */
+function buildServer() {
+  const server = new Server(
+    { name: "lp-guardian", version: "0.1.0" },
+    { capabilities: { tools: {} } }
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: TOOLS,
-}));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: TOOLS,
+  }));
 
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  try {
-    return await handleTool(
-      req.params.name,
-      (req.params.arguments ?? {}) as Record<string, unknown>
-    );
-  } catch (err: any) {
-    const msg =
-      err?.message?.includes("ECONNREFUSED") || err?.message?.includes("fetch")
-        ? "I couldn't reach the analysis service right now — try again in a moment."
-        : err?.message || "Something went wrong.";
-    return errorResult(msg);
-  }
-});
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    try {
+      return await handleTool(
+        req.params.name,
+        (req.params.arguments ?? {}) as Record<string, unknown>
+      );
+    } catch (err: any) {
+      const msg =
+        err?.message?.includes("ECONNREFUSED") ||
+        err?.message?.includes("fetch")
+          ? "I couldn't reach the analysis service right now — try again in a moment."
+          : err?.message || "Something went wrong.";
+      return errorResult(msg);
+    }
+  });
 
-async function main() {
+  return server;
+}
+
+// ─── Transports ──────────────────────────────────────────────────────────────
+
+/** Local transport — Claude spawns this process and talks over stdin/stdout. */
+async function runStdio() {
+  const server = buildServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[MCP] LP Guardian MCP server running on stdio");
 }
 
-main().catch((err) => {
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  if (chunks.length === 0) return undefined;
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Remote transport — server listens on HTTP; hosts (Claude Code/Desktop) connect
+ * to a URL. Stateless Streamable HTTP: a fresh server is created per request, so
+ * there is no session to track and any client can connect at any time.
+ */
+async function runHttp() {
+  const port = Number(process.env.MCP_PORT ?? 8765);
+
+  const http = createHttpServer(async (req, res) => {
+    // Permissive CORS so browser-based MCP hosts can connect too.
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "content-type, mcp-session-id, mcp-protocol-version"
+    );
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (req.url?.split("?")[0] !== "/mcp") {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found. Use POST /mcp." }));
+      return;
+    }
+
+    if (req.method !== "POST") {
+      // Stateless mode has no standalone GET/DELETE session streams.
+      res.writeHead(405, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Method not allowed." },
+          id: null,
+        })
+      );
+      return;
+    }
+
+    const server = buildServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    res.on("close", () => {
+      transport.close();
+      server.close();
+    });
+    await server.connect(transport);
+    await transport.handleRequest(req, res, await readJsonBody(req));
+  });
+
+  http.listen(port, () => {
+    console.error(
+      `[MCP] LP Guardian MCP server running on http://localhost:${port}/mcp`
+    );
+  });
+}
+
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
+const useHttp =
+  process.argv.includes("--http") ||
+  (process.env.MCP_TRANSPORT ?? "stdio").toLowerCase() === "http";
+
+(useHttp ? runHttp() : runStdio()).catch((err) => {
   console.error("[MCP] Fatal error:", err);
   process.exit(1);
 });

@@ -8,6 +8,7 @@
     "dev:web": "pnpm --filter @lp-guardian/web dev",
     "dev:server": "pnpm --filter @lp-guardian/server dev",
     "dev:mcp": "pnpm --filter @lp-guardian/mcp-server dev",
+    "dev:mcp:http": "pnpm --filter @lp-guardian/mcp-server dev:http",
     "build": "pnpm --filter @lp-guardian/web build",
     "build:core": "pnpm --filter @lp-guardian/core build",
     "build:server": "pnpm --filter @lp-guardian/server build",
