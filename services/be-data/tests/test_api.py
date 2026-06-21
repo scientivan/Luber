@@ -57,3 +57,17 @@ def test_validation_bad_risk_tolerance():
 
 def test_validation_empty_asset():
     assert client.post("/compute/stress", json={**_body(), "asset": "", "pct": -10}).status_code == 422
+
+
+def test_price_history_optional_falls_back():
+    # No priceHistory → service sources it itself and labels the provenance.
+    r = client.post("/compute/risk", json={"positions": demo_positions()})
+    assert r.status_code == 200
+    prov = r.json()["priceProvenance"]
+    assert prov["label"] in {"real", "snapshot", "synthetic", "mixed"}
+    assert r.json()["cluster"]["token"] == "ETH"
+
+
+def test_price_history_provided_is_used_as_is():
+    r = client.post("/compute/risk", json=_body())
+    assert r.json()["priceProvenance"]["label"] == "provided"

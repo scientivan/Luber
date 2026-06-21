@@ -1,7 +1,19 @@
 import type { Position } from "@lp-guardian/core";
-import { config } from "../config.js";
+import { config, resolvePortfolio } from "../config.js";
 import { suiClient } from "../chain/suiClient.js";
-import { DEMO_POSITIONS, demoPriceHistory } from "../services/mockData.js";
+import { DEMO_POSITIONS } from "../services/mockData.js";
+
+/**
+ * Canonical token for correlation/pricing. ETH-family wrappers collapse to ETH so
+ * WETH/stETH positions join the ETH cluster and share one price series (otherwise
+ * the hero "87% is one ETH bet" splits apart).
+ */
+export function canonicalToken(sym: string): string {
+  const s = (sym ?? "").trim().toUpperCase();
+  if (s === "WETH" || s === "STETH" || s === "WSTETH" || s === "WEETH") return "ETH";
+  if (s === "WBTC" || s === "TBTC" || s === "LBTC") return "BTC";
+  return s;
+}
 
 /**
  * Scout — discovers all LP positions for a wallet as Sui on-chain objects,
@@ -12,7 +24,7 @@ export const scout = {
   async discoverPositions(walletAddress: string): Promise<Position[]> {
     if (config.mockMode) return DEMO_POSITIONS;
 
-    const portfolioId = config.sui.portfolioId;
+    const { portfolioId } = resolvePortfolio(walletAddress);
     if (!portfolioId || portfolioId === "0x0") {
       console.warn("[Scout] No portfolio ID configured, falling back to mock");
       return DEMO_POSITIONS;
@@ -22,11 +34,15 @@ export const scout = {
       // 1. Get dynamic field children (Position objects) from the Portfolio shared object
       const dfRes = await suiClient.getDynamicFields({ parentId: portfolioId });
       
-      // Position objects are stored with numeric keys (0, 1, 2, ...)
-      const positionDFs = dfRes.data.filter(df => 
-        df.objectType.includes("::lp_guardian::Position") || 
-        typeof df.name.value === "number"
-      );
+      // Position objects are stored with numeric keys (0, 1, 2, ...). Sort by that
+      // key so our array index matches the on-chain dof index — `rebalance` applies
+      // new_value_usd[j] to position[j], so order MUST be deterministic.
+      const positionDFs = dfRes.data
+        .filter(df =>
+          df.objectType.includes("::lp_guardian::Position") ||
+          typeof df.name.value === "number"
+        )
+        .sort((a, b) => Number(a.name.value) - Number(b.name.value));
 
       if (positionDFs.length === 0) {
         console.warn("[Scout] No positions found in portfolio");
@@ -75,33 +91,32 @@ export const scout = {
     }
   },
 
-  /** Fetch historical prices from Pyth Benchmarks TV Shim or CoinGecko */
+  /**
+   * Fetch historical prices from Pyth Benchmarks TV Shim, keyed by CANONICAL
+   * symbol (WETH/stETH → ETH) so the keys line up with `position.token`. Returns
+   * `{}` when nothing usable is found — BE Data then sources prices itself and
+   * labels the provenance (we never silently substitute fake numbers here).
+   */
   async priceHistory(tokens: string[]): Promise<Record<string, number[]>> {
-    if (config.mockMode) return demoPriceHistory();
+    if (config.mockMode) return {}; // let BE Data synthesize (single, labeled source)
 
     const history: Record<string, number[]> = {};
     const toTimestamp = Math.floor(Date.now() / 1000);
     const fromTimestamp = toTimestamp - 30 * 24 * 60 * 60; // 30 days ago
 
+    // Canonicalize + de-dup so the ETH family is fetched once and shares a series.
+    const canon = Array.from(new Set(tokens.map((t) => canonicalToken(t.split("::").pop() || t))));
+
     try {
-      for (const token of tokens) {
-        // Parse coin symbol, e.g. "0x00...::sui::SUI" -> "SUI"
-        const symbol = token.split("::").pop()?.toUpperCase() || "SUI";
+      for (const symbol of canon) {
+        if (history[symbol]) continue;
         const prices = await fetchPythHistoricalPrices(symbol, fromTimestamp, toTimestamp);
-        if (prices.length > 0) {
-          history[token] = prices;
-        }
+        if (prices.length > 0) history[symbol] = prices;
       }
-
-      // If empty or missing, fallback to demo price history
-      if (Object.keys(history).length === 0) {
-        return demoPriceHistory();
-      }
-
-      return history;
+      return history; // may be {} — BE Data fills + labels it
     } catch (err) {
-      console.error("[scout] failed to fetch real price history, falling back to demo:", err);
-      return demoPriceHistory();
+      console.error("[scout] failed to fetch real price history; BE Data will source it:", err);
+      return {};
     }
   },
 };
@@ -128,9 +143,10 @@ function mapObjectToPosition(obj: any): Position | null {
     objectId,
     protocol,
     poolId: fields.pool_id,
-    pair: `-`,
+    pair: `${tokenX}-${tokenY}`,
     tokenX,
     tokenY,
+    token: canonicalToken(tokenX), // primary token for clustering (WETH/stETH → ETH)
     valueUSD: Number(fields.value_usd || 0),
     inRange: true, // Default true, enriched later
     daysOutOfRange: 0,

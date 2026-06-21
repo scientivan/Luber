@@ -16,6 +16,8 @@ export interface Position {
   pair: string; // e.g. "ETH-USDC"
   tokenX: string;
   tokenY: string;
+  /** Canonical primary token for correlation/clustering (e.g. WETH/stETH → ETH). */
+  token?: string;
   valueUSD: number;
   inRange: boolean;
   daysOutOfRange?: number;

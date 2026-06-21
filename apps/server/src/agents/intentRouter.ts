@@ -27,7 +27,9 @@ export async function routeMessage(walletAddress: string, message: string): Prom
       };
     }
     case "simulate": {
-      const sim = await strategist.simulate(walletAddress, "ETH", -10);
+      // Shock the wallet's actual dominant cluster token, not a hardcoded "ETH".
+      const h = await strategist.diagnose(walletAddress);
+      const sim = await strategist.simulate(walletAddress, h.cluster.token, -10);
       return {
         role: "agent",
         intent,
@@ -35,10 +37,25 @@ export async function routeMessage(walletAddress: string, message: string): Prom
         payload: sim,
       };
     }
-    case "fix":
-      return { role: "agent", intent, text: "I'll cut your ETH cluster from ~87% to ~40% into uncorrelated assets via DeepBook. Review the preview, then one signature.", payload: { needsSignature: true } };
-    case "guard":
-      return { role: "agent", intent, text: "To arm Guard, sign once to mint a revocable capability. I can rebalance, but I physically cannot withdraw your funds — enforced by Move, not by my promise.", payload: { needsSignature: true } };
+    case "fix": {
+      const h = await strategist.diagnose(walletAddress);
+      const targetPct = h.suggestedAllocation?.allocations.find((a) => a.token === h.cluster.token)?.targetPct ?? 40;
+      return {
+        role: "agent",
+        intent,
+        text: `I'll cut your ${h.cluster.token} cluster from ${Math.round(h.cluster.exposurePct)}% to ${Math.round(targetPct)}% into uncorrelated assets via DeepBook. Review the preview, then one signature.`,
+        payload: { needsSignature: true, health: h },
+      };
+    }
+    case "guard": {
+      const h = await strategist.diagnose(walletAddress);
+      return {
+        role: "agent",
+        intent,
+        text: `To arm Guard on your ${h.cluster.token} cluster, sign once to mint a revocable capability. I can rebalance, but I physically cannot withdraw your funds — enforced by Move, not by my promise.`,
+        payload: { needsSignature: true, health: h },
+      };
+    }
     case "explain":
       return { role: "agent", intent, text: "Your positions look diversified, but their prices move together — so a single drop hits all of them at once. That hidden correlation is the real risk.", payload: undefined };
   }

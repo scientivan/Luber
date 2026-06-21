@@ -156,6 +156,32 @@ def load_price_history(
     return {"priceHistory": syn, "provenance": _prov("synthetic", "Bybit unreachable → seeded walk", warn)}
 
 
+def resolve_price_history(positions: list[dict], price_history: dict | None) -> tuple[dict[str, list[float]], dict]:
+    """Prefer the caller's priceHistory; only fetch when it's absent/empty.
+
+    BE Agent (Scout) normally supplies real Pyth closes — we use them as-is. When
+    nothing usable is provided, we derive the token set from ``positions`` and fall
+    back to ``load_price_history`` (Bybit → snapshot → synthetic). Returns
+    ``(priceHistory, provenance)``.
+    """
+    if price_history and any(len(v) >= 2 for v in price_history.values()):
+        return price_history, _prov("provided", "caller priceHistory (e.g. Scout/Pyth)", [])
+
+    tokens: list[str] = []
+    for p in positions or []:
+        # primary = canonical `token` if present (else raw tokenX), plus the quote
+        # leg. Avoid adding BOTH token and tokenX or ETH-family wrappers (WETH/stETH)
+        # would show up as separate, unpriced assets.
+        for t in (p.get("token") or p.get("tokenX"), p.get("tokenY")):
+            if t and t not in tokens:
+                tokens.append(t)
+    if not tokens:
+        return {}, _prov("synthetic", "no positions/tokens to price", [])
+
+    out = load_price_history(tokens, source="auto")
+    return out["priceHistory"], out["provenance"]
+
+
 def _backfill(primary: dict, fallback: dict, tokens: list[str]) -> dict[str, list[float]]:
     return {t: primary.get(t) or fallback[t] for t in tokens}
 

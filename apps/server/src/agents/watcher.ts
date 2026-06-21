@@ -6,9 +6,8 @@
  *
  * This is what powers the demo's climax: the autonomous SAVE with no click.
  */
-import { config } from "../config.js";
-import { strategist } from "./strategist.js";
-import type { RebalancePlan } from "@lp-guardian/core";
+import { config, resolvePortfolio } from "../config.js";
+import { strategist, buildPlanFromAllocation } from "./strategist.js";
 
 export type SaveEvent =
   | { kind: "trigger"; asset: string; pct: number; text: string }
@@ -18,12 +17,17 @@ export type SaveEvent =
 type Subscriber = (e: SaveEvent) => void;
 
 class Watcher {
-  private guarded = new Map<string, { capId: string }>();
+  private guarded = new Map<string, { capId: string; portfolioId: string }>();
   private subscribers = new Set<Subscriber>();
   private timer?: NodeJS.Timeout;
 
-  arm(walletAddress: string, capId: string) {
-    this.guarded.set(walletAddress, { capId });
+  /** Arm Guard for a wallet. capId/portfolioId fall back to the resolved demo cap. */
+  arm(walletAddress: string, capId?: string) {
+    const resolved = resolvePortfolio(walletAddress);
+    this.guarded.set(walletAddress, {
+      capId: capId && capId !== "0x0" ? capId : resolved.capId,
+      portfolioId: resolved.portfolioId,
+    });
   }
   disarm(walletAddress: string) {
     this.guarded.delete(walletAddress);
@@ -61,21 +65,19 @@ class Watcher {
 
     this.emit({ kind: "trigger", asset, pct, text: `⚠️ ${asset} just dropped ${Math.abs(pct)}%. Your cluster is bleeding. Acting now.` });
 
+    // Diagnose now to get the REAL cluster + allocation, then build a real plan.
+    const health = await strategist.diagnose(walletAddress);
     const sim = await strategist.simulate(walletAddress, asset, pct);
     this.emit({ kind: "acting", text: "Rebalancing the correlated cluster via DeepBook…" });
 
-    const plan: RebalancePlan = {
-      planId: `auto_${Date.now()}`,
-      steps: [],
-      expectedHealthRange: [58, 72],
-      confidence: 0.72,
-      preview: "Cut ETH cluster 87%→40% into uncorrelated assets via DeepBook.",
-    };
-    const { txDigest, explorer } = await strategist.executeRebalance(guard.capId, plan);
+    const plan = buildPlanFromAllocation(health);
+    const { txDigest, explorer } = await strategist.executeRebalance(guard.capId, guard.portfolioId, plan);
+    await strategist.mintReport(guard.capId, guard.portfolioId, { ...health, txDigest });
 
+    const targetPct = health.suggestedAllocation?.allocations.find((a) => a.token === health.cluster.token)?.targetPct ?? 40;
     this.emit({
       kind: "done",
-      text: `✅ I cut your ${asset} exposure from 87% to 40% — into uncorrelated assets via DeepBook. I just saved you about $${Math.round(sim.guarded.moneySaved)} of that drop.`,
+      text: `✅ I cut your ${health.cluster.token} exposure from ${Math.round(health.cluster.exposurePct)}% to ${Math.round(targetPct)}% — into uncorrelated assets via DeepBook. I just saved you about $${Math.round(sim.guarded.moneySaved)} of that drop.`,
       txDigest,
       explorer,
       moneySaved: sim.guarded.moneySaved,
