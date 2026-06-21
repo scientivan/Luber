@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 
 export const config = {
   port: Number(process.env.PORT ?? 8787),
@@ -35,6 +35,12 @@ export const config = {
 
   pyth: {
     hermesUrl: process.env.PYTH_HERMES_URL ?? "https://hermes.pyth.network",
+  },
+
+    supabase: {
+    url: process.env.SUPABASE_URL ?? "",
+    anonKey: process.env.SUPABASE_ANON_KEY ?? "",
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   },
 
   ai: {
