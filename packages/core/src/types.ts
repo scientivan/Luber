@@ -23,6 +23,9 @@ export interface Position {
   daysOutOfRange?: number;
   /** True when gas-to-close exceeds position value. */
   isDust?: boolean;
+  source?: "chain" | "demo";
+  recommendation?: "hold" | "monitor" | "migrate";
+  migrationReason?: string;
 }
 
 /** The hero: the largest correlation cluster across all positions. */
@@ -88,6 +91,7 @@ export interface PortfolioHealth {
   suggestedAllocation?: SuggestedAllocation;
   txDigest?: string;
   reportObjectId?: string;
+  source?: "chain" | "demo";
 }
 
 /** A pool flagged in diagnose — becomes the "menu" for deep_diagnose_pool. */
@@ -110,6 +114,7 @@ export interface DeepBookLiquidityProfile {
 }
 
 export interface PoolDeepDive {
+  positionId?: string;
   poolId: string;
   protocol: Protocol;
   pair: string;
@@ -123,6 +128,20 @@ export interface PoolDeepDive {
     slippageBpsAt30pct: number;
     feasible: boolean;
   };
+  source?: "chain" | "demo";
+  recommendation?: "hold" | "monitor" | "migrate";
+  migrationReason?: string;
+}
+
+export interface MigrationResult {
+  simulated: boolean;
+  source: "demo" | "chain";
+  positionId: string;
+  txDigest: string;
+  status: "simulated" | "submitted";
+  fromPoolId: string;
+  toPoolId: string;
+  summary: string;
 }
 
 /** simulate_shock / /simulate/shock result. */

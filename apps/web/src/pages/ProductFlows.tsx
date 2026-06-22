@@ -10,6 +10,7 @@ import {
   fetchGuardStatus,
   fetchPoolHealth,
   fetchPortfolioHealth,
+  migratePool,
   prepareGuard,
   prepareRebalance,
   simulateShock,
@@ -111,6 +112,7 @@ export function PortfolioDiagnosis() {
       <ErrorBox error={error} />
       {health && (
         <>
+          {health.source === "demo" && <div className="notice demo-label">Demo data · local fixture, no chain or indexer read.</div>}
           <section className="metric-grid">
             <article className="panel metric"><span>Health</span><strong>{health.healthScore}/100</strong><small>{health.riskLevel}</small></article>
             <article className="panel metric"><span>Portfolio</span><strong>${health.totalValueUSD.toLocaleString()}</strong><small>{health.positionCount} positions</small></article>
@@ -156,15 +158,32 @@ export function PoolDiagnosis() {
   const { walletAddress = "", poolId = "" } = useParams();
   const [data, setData] = useState<PoolDeepDive | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [migration, setMigration] = useState<string | null>(null);
+  const [migrating, setMigrating] = useState(false);
   useEffect(() => {
     void fetchPoolHealth(walletAddress, poolId).then(setData).catch((err) => setError(err.message));
   }, [walletAddress, poolId]);
+
+  async function migrate() {
+    if (!data?.positionId) return;
+    setMigrating(true);
+    setError(null);
+    try {
+      const result = await migratePool(walletAddress, data.positionId);
+      setMigration(`${result.summary} ${result.txDigest}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Migration failed");
+    } finally {
+      setMigrating(false);
+    }
+  }
   return (
     <ProductShell title="Pool diagnosis" subtitle="Inspect range health, loss estimate, cluster contribution, and exit depth.">
       <WalletGate expected={walletAddress}>
         <ErrorBox error={error} />
         {!data ? <div className="panel">Loading pool diagnosis…</div> : (
           <>
+            {data.source === "demo" && <div className="notice demo-label">Demo data · migration is simulated and never broadcast.</div>}
             <section className="metric-grid">
               <article className="panel metric"><span>Pool</span><strong>{data.pair}</strong><small>{data.protocol}</small></article>
               <article className="panel metric"><span>Range</span><strong>{data.inRange ? "Active" : "Inactive"}</strong><small>{data.daysOutOfRange} days out</small></article>
@@ -175,6 +194,17 @@ export function PoolDiagnosis() {
               <h2>Exit liquidity</h2>
               <p>Depth: ${data.exitLiquidity.depthUSD.toLocaleString()} · Estimated slippage at 30% exit: {data.exitLiquidity.slippageBpsAt30pct} bps.</p>
               <div className={`notice ${data.exitLiquidity.feasible ? "success" : "error"}`}>{data.exitLiquidity.feasible ? "Exit appears feasible at modeled size." : "Modeled exit exceeds available depth."}</div>
+              {data.recommendation === "migrate" && (
+                <div className="result-callout">
+                  <b>Migration recommended.</b> {data.migrationReason}
+                  <div style={{ marginTop: 14 }}>
+                    <button className="button primary" disabled={migrating} onClick={() => void migrate()}>
+                      {migrating ? "Simulating…" : "Simulate migration"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {migration && <div className="notice success">{migration}</div>}
             </section>
           </>
         )}

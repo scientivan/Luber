@@ -5,6 +5,7 @@ import type {
   PoolDeepDive,
   PortfolioHealth,
   RebalanceIntent,
+  MigrationResult,
   ShockResult,
   SystemStatus,
 } from "@lp-guardian/core";
@@ -50,6 +51,9 @@ export const fetchPortfolioHealth = (walletAddress: string) =>
 
 export const fetchPoolHealth = (walletAddress: string, poolId: string) =>
   post<PoolDeepDive>("/portfolio/pool-health", { walletAddress, poolId });
+
+export const migratePool = (walletAddress: string, positionId: string) =>
+  post<MigrationResult>("/portfolio/migrate", { walletAddress, positionId });
 
 export const simulateShock = (walletAddress: string, asset: string, pct: number) =>
   post<ShockResult>("/simulate/shock", { walletAddress, asset, pct });

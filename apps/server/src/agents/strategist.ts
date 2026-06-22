@@ -6,7 +6,7 @@ import type {
   RiskLevel,
   Position,
 } from "@lp-guardian/core";
-import { config, explorerTx, resolveActionPortfolio, resolvePortfolio } from "../config.js";
+import { config, explorerTx, isDemoWallet, resolveActionPortfolio } from "../config.js";
 import { pythClient } from "../services/pythClient.js";
 import * as supabaseService from "../services/supabaseService.js";
 import { beData } from "../services/beDataClient.js";
@@ -64,7 +64,9 @@ export function buildPlanFromAllocation(health: PortfolioHealth): RebalancePlan 
 export const strategist = {
   async diagnose(walletAddress: string, opts?: { positions?: Position[] }): Promise<PortfolioHealth> {
     const positions = opts?.positions ?? (await scout.discoverPositions(walletAddress));
-    const priceHistory = await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
+    const priceHistory = isDemoWallet(walletAddress)
+      ? {}
+      : await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
 
     const risk = await beData.risk(positions, priceHistory);
     const fallbackAsset = positions.map((p) => p.token || p.tokenX || p.tokenY).find((value) => !!value)?.trim();
@@ -95,12 +97,15 @@ export const strategist = {
       bleedingPools,
       insights: risk["insights"],
       suggestedAllocation: risk["suggestedAllocation"],
+      source: isDemoWallet(walletAddress) ? "demo" : "chain",
     };
   },
 
   async simulate(walletAddress: string, asset: string, pct: number, opts?: { positions?: Position[] }): Promise<ShockResult> {
     const positions = opts?.positions ?? (await scout.discoverPositions(walletAddress));
-    const priceHistory = await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
+    const priceHistory = isDemoWallet(walletAddress)
+      ? {}
+      : await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
     return beData.simulateShock(positions, priceHistory, asset, pct) as Promise<ShockResult>;
   },
 
@@ -115,12 +120,26 @@ export const strategist = {
     const pool = positions.find((p) => p.poolId === poolId);
     if (!pool) throw new Error(`Pool ${poolId} not found in this wallet's positions.`);
 
-    const priceHistory = await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
+    const priceHistory = isDemoWallet(walletAddress)
+      ? {}
+      : await scout.priceHistory(positions.flatMap((p) => [p.tokenX, p.tokenY]));
     // Exit-liquidity needs order-book depth. Reuse the DeepBook profile (real when
     // available, graceful synthetic fallback otherwise).
     const deepBookDepth =
       (pool as any).deepBookData ??
-      (await deepbookClient.getLiquidityProfile(pool.poolId, pool.tokenX, pool.tokenY).catch(() => undefined));
+      (isDemoWallet(walletAddress)
+        ? {
+            poolId: pool.poolId,
+            baseToken: pool.tokenX,
+            quoteToken: pool.tokenY,
+            midPrice: 1,
+            spreadBps: pool.inRange ? 12 : 48,
+            depthUSD: pool.inRange ? 1_800_000 : 420_000,
+            depthAt2Percent: pool.inRange ? 430_000 : 100_000,
+          }
+        : await deepbookClient
+            .getLiquidityProfile(pool.poolId, pool.tokenX, pool.tokenY)
+            .catch(() => undefined));
 
     const result = await beData.poolDiagnose(positions, priceHistory, poolId, deepBookDepth);
     return { ...result, deepBookData: deepBookDepth };

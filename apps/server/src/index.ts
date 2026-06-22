@@ -4,8 +4,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { z } from "zod";
-import type { HistoryItem, PoolDeepDive, PortfolioHealth, ShockResult } from "@lp-guardian/core";
-import { config, configuredDemoWallets, normalizeAddress, resolveActionPortfolio } from "./config.js";
+import type { HistoryItem, MigrationResult, PoolDeepDive, PortfolioHealth, ShockResult } from "@lp-guardian/core";
+import { config, configuredDemoWallets, isDemoWallet, normalizeAddress, resolveActionPortfolio } from "./config.js";
 import { strategist, buildPlanFromAllocation } from "./agents/strategist.js";
 import { scout } from "./agents/scout.js";
 import { watcher } from "./agents/watcher.js";
@@ -16,6 +16,7 @@ import * as intentService from "./services/rebalanceIntentService.js";
 import { wsHandler } from "./websocket/wsHandler.js";
 import { getSystemStatus } from "./services/statusService.js";
 import { strategistKeypair, suiClient } from "./chain/suiClient.js";
+import { DEMO_MODE_POSITIONS, isDemoPosition } from "./services/mockData.js";
 
 const app = new Hono();
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
@@ -73,7 +74,12 @@ app.post("/wallet/positions", async (c) => {
   const { walletAddress } = walletPositionsSchema.parse(await c.req.json());
   const wallet = normalizeAddress(walletAddress);
   const positions = await scout.discoverWalletPositions(wallet);
-  return c.json({ positions, count: positions.length, valueBasis: "estimated_onchain" });
+  return c.json({
+    positions,
+    count: positions.length,
+    valueBasis: isDemoWallet(wallet) ? "demo_fixture" : "estimated_onchain",
+    source: isDemoWallet(wallet) ? "demo" : "chain",
+  });
 });
 
 const diagnoseSchema = walletSchema.extend({
@@ -117,9 +123,20 @@ app.post("/portfolio/pool-health", async (c) => {
   const clusterValue = health.positions
     .filter((_, index) => health.cluster.positions.includes(index))
     .reduce((sum, item) => sum + item.valueUSD, 0);
-  const liquidity = await deepbookClient.getLiquidityProfile(position.poolId, position.tokenX, position.tokenY);
+  const liquidity = isDemoWallet(wallet)
+    ? {
+        poolId: position.poolId,
+        baseToken: position.tokenX,
+        quoteToken: position.tokenY,
+        midPrice: 1,
+        spreadBps: position.inRange ? 12 : 48,
+        depthUSD: position.inRange ? 1_800_000 : 420_000,
+        depthAt2Percent: position.inRange ? 430_000 : 100_000,
+      }
+    : await deepbookClient.getLiquidityProfile(position.poolId, position.tokenX, position.tokenY);
   const exitValue = position.valueUSD * 0.3;
   const result: PoolDeepDive = {
+    positionId: position.objectId,
     poolId: position.poolId,
     protocol: position.protocol,
     pair: position.pair,
@@ -138,6 +155,9 @@ app.post("/portfolio/pool-health", async (c) => {
       ),
       feasible: liquidity.depthUSD >= exitValue,
     },
+    source: position.source ?? (isDemoWallet(wallet) ? "demo" : "chain"),
+    recommendation: position.recommendation ?? (!position.inRange ? "monitor" : "hold"),
+    migrationReason: position.migrationReason,
   };
   await supabaseService.logEvent(wallet, wallet, "diagnosis", result as unknown as Record<string, unknown>, {
     level: "pool",
@@ -192,6 +212,34 @@ app.post("/simulate/shock", async (c) => {
   const wallet = normalizeAddress(walletAddress);
   const sim: ShockResult = await strategist.simulate(wallet, asset.toUpperCase(), pct);
   return c.json(sim);
+});
+
+const migrateSchema = walletSchema.extend({ positionId: z.string().min(1) });
+app.post("/portfolio/migrate", async (c) => {
+  const { walletAddress, positionId } = migrateSchema.parse(await c.req.json());
+  const wallet = normalizeAddress(walletAddress);
+  if (!isDemoWallet(wallet) || !isDemoPosition(positionId)) {
+    throw new Error("Live pool migration is not enabled; use the configured demo wallet and demo position");
+  }
+  const position = DEMO_MODE_POSITIONS.find((item) => item.objectId === positionId)!;
+  const suffix = Date.now().toString(36).toUpperCase();
+  const result: MigrationResult = {
+    simulated: true,
+    source: "demo",
+    positionId,
+    txDigest: `DEMO_TX_${suffix}`,
+    status: "simulated",
+    fromPoolId: position.poolId,
+    toPoolId: `0x${"b2".repeat(32)}`,
+    summary: `Simulated migration of ${position.pair} into a range centered on current price. No transaction was signed or broadcast.`,
+  };
+  await supabaseService.logEvent(wallet, wallet, "migration_simulated", result as unknown as Record<string, unknown>, {
+    level: "pool",
+    poolId: position.poolId,
+    summary: result.summary,
+    txDigest: result.txDigest,
+  }).catch(console.error);
+  return c.json(result);
 });
 
 app.post("/portfolio/rebalance/prepare", async (c) => {

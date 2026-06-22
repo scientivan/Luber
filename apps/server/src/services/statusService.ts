@@ -58,7 +58,7 @@ export async function getSystemStatus(): Promise<SystemStatus> {
     mcp: {
       ok: beData.ok && rpc.ok,
       mode: "backing_endpoints",
-      tools: ["discover_positions", "diagnose_portfolio", "deep_diagnose_pool", "simulate_shock", "get_history", "arm_guard"],
+      tools: ["check_lp_position", "discover_positions", "diagnose_portfolio", "deep_diagnose_pool", "simulate_shock", "migrate_pool", "get_history", "arm_guard"],
     },
   };
 }

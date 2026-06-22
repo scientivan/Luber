@@ -9,6 +9,43 @@ export const DEMO_POSITIONS: Position[] = [
   { objectId: "0xpos5", protocol: "cetus", poolId: "0xdemo5", pair: "BTC-USDC", tokenX: "BTC", tokenY: "USDC", valueUSD: 50, inRange: true, isDust: true },
 ];
 
+export const DEMO_MODE_POSITIONS: Position[] = [
+  {
+    objectId: `0x${"d1".repeat(32)}`,
+    protocol: "cetus",
+    poolId: `0x${"a1".repeat(32)}`,
+    pair: "SUI-USDC",
+    tokenX: "SUI",
+    tokenY: "USDC",
+    token: "SUI",
+    valueUSD: 4_800,
+    inRange: true,
+    daysOutOfRange: 0,
+    source: "demo",
+    recommendation: "hold",
+    migrationReason: "Position is active and earning fees inside its configured range.",
+  },
+  {
+    objectId: `0x${"d2".repeat(32)}`,
+    protocol: "cetus",
+    poolId: `0x${"a2".repeat(32)}`,
+    pair: "ETH-USDC",
+    tokenX: "ETH",
+    tokenY: "USDC",
+    token: "ETH",
+    valueUSD: 3_250,
+    inRange: false,
+    daysOutOfRange: 18,
+    source: "demo",
+    recommendation: "migrate",
+    migrationReason: "Position has stayed outside its range for 18 days; migrate into a range centered on current price.",
+  },
+];
+
+export function isDemoPosition(positionId: string): boolean {
+  return DEMO_MODE_POSITIONS.some((position) => position.objectId === positionId);
+}
+
 /** Synthetic correlated price history for the compute service. */
 export function demoPriceHistory(n = 120): Record<string, number[]> {
   const base: number[] = [];

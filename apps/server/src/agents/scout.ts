@@ -1,7 +1,7 @@
 import type { Position } from "@lp-guardian/core";
-import { config, resolvePortfolio } from "../config.js";
+import { config, isDemoWallet, resolvePortfolio } from "../config.js";
 import { suiClient, discoveryClient } from "../chain/suiClient.js";
-import { DEMO_POSITIONS } from "../services/mockData.js";
+import { DEMO_MODE_POSITIONS, DEMO_POSITIONS } from "../services/mockData.js";
 import { deepbookClient } from "../services/deepbookClient.js";
 import { Network, TurbosSdk } from "turbos-clmm-sdk";
 import * as supabaseService from "../services/supabaseService.js";
@@ -31,6 +31,7 @@ const turbosSdk = new TurbosSdk(
  */
 export const scout = {
   async discoverPositions(walletAddress: string): Promise<Position[]> {
+    if (isDemoWallet(walletAddress)) return structuredClone(DEMO_MODE_POSITIONS);
     if (config.mockMode) return DEMO_POSITIONS;
 
     const { portfolioId } = resolvePortfolio(walletAddress);
@@ -169,6 +170,7 @@ export const scout = {
    * Returns [] when the wallet holds no Cetus positions.
    */
   async discoverWalletPositions(walletAddress: string): Promise<Position[]> {
+    if (isDemoWallet(walletAddress)) return structuredClone(DEMO_MODE_POSITIONS);
     const posType = `${config.discovery.cetusPkg}::position::Position`;
     const owned = await discoveryClient.getOwnedObjects({
       owner: walletAddress,

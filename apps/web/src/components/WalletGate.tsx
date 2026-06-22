@@ -48,7 +48,7 @@ export function WalletGate({
         <p style={{ color: "#777", marginTop: 12 }}>
           Disconnect and reconnect with the correct wallet, or switch accounts in your wallet extension.
         </p>
-        <button className="button" onClick={() => dAppKit.disconnect()}>
+        <button className="button" onClick={() => dAppKit.disconnectWallet()}>
           Disconnect
         </button>
       </section>

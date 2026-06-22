@@ -1,5 +1,8 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "node:url";
 import { isValidSuiAddress, normalizeSuiAddress } from "@mysten/sui/utils";
+
+loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), override: false });
 
 export const config = {
   port: Number(process.env.PORT ?? 8787),
@@ -35,6 +38,11 @@ export const config = {
     challengeTtlMs: Number(process.env.AUTH_CHALLENGE_TTL_MS ?? 5 * 60_000),
     sessionTtlMs: Number(process.env.AUTH_SESSION_TTL_MS ?? 24 * 60 * 60_000),
     rebalanceIntentTtlMs: Number(process.env.REBALANCE_INTENT_TTL_MS ?? 5 * 60_000),
+  },
+
+  demo: {
+    enabled: (process.env.DEMO_MODE ?? "false") === "true",
+    wallet: process.env.DEMO_WALLET ?? "",
   },
 
   watcher: {
@@ -93,6 +101,15 @@ function walletPortfolioMap(): Record<string, string> {
 export function normalizeAddress(value: string): string {
   if (!isValidSuiAddress(value)) throw new Error("Invalid Sui address");
   return normalizeSuiAddress(value);
+}
+
+export function isDemoWallet(value: string): boolean {
+  if (!config.demo.enabled || !config.demo.wallet) return false;
+  try {
+    return normalizeAddress(value) === normalizeAddress(config.demo.wallet);
+  } catch {
+    return false;
+  }
 }
 
 export function configuredDemoWallets(): Set<string> {
