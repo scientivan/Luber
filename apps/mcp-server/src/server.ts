@@ -664,7 +664,7 @@ async function runHttp() {
     await transport.handleRequest(req, res, await readJsonBody(req));
   });
 
-  http.listen(port, () => {
+  http.listen(port, "0.0.0.0", () => {
     console.error(
       `[MCP] Luber MCP server running on http://localhost:${port}/mcp${isDemoMode() ? ` (DEMO_MODE — wallet: ${DEMO_WALLET})` : ""}`
     );
