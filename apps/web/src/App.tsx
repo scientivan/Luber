@@ -15,7 +15,6 @@ export function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/docs/*" element={<Docs />} />
-      <Route path="/atlas" element={<History />} />
       <Route path="/history/:walletAddress" element={<History />} />
       <Route path="/history" element={<History />} />
       <Route path="/status" element={<StatusHub />} />

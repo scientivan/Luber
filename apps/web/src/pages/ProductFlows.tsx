@@ -43,6 +43,7 @@ function ErrorBox({ error }: { error: string | null }) {
 }
 
 export function PortfolioDiagnosis() {
+  const account = useCurrentAccount();
   const params = useParams();
   const navigate = useNavigate();
   const [search] = useSearchParams();
@@ -148,13 +149,18 @@ export function PortfolioDiagnosis() {
   );
 
   return (
-    <ProductShell title="Portfolio diagnosis" subtitle="See the correlated bet hidden across every liquidity position.">
+    <ProductShell
+      title="Portfolio diagnosis"
+      subtitle="See the correlated bet hidden across every liquidity position."
+      hideHero={!account && !!params.walletAddress}
+    >
       {params.walletAddress ? <WalletGate expected={params.walletAddress}>{diagnosisContent}</WalletGate> : diagnosisContent}
     </ProductShell>
   );
 }
 
 export function PoolDiagnosis() {
+  const account = useCurrentAccount();
   const { walletAddress = "", poolId = "" } = useParams();
   const [data, setData] = useState<PoolDeepDive | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +184,11 @@ export function PoolDiagnosis() {
     }
   }
   return (
-    <ProductShell title="Pool diagnosis" subtitle="Inspect range health, loss estimate, cluster contribution, and exit depth.">
+    <ProductShell
+      title="Pool diagnosis"
+      subtitle="Inspect range health, loss estimate, cluster contribution, and exit depth."
+      hideHero={!account && !!walletAddress}
+    >
       <WalletGate expected={walletAddress}>
         <ErrorBox error={error} />
         {!data ? <div className="panel">Loading pool diagnosis…</div> : (

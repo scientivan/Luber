@@ -19,15 +19,20 @@ export function WalletGate({
 
   if (!account) {
     return (
-      <section className="panel" style={{ textAlign: "center", padding: 40 }}>
-        <h2>Connect your wallet</h2>
-        <p>This page requires wallet <b>{expected.slice(0, 10)}…{expected.slice(-6)}</b> to be connected.</p>
-        <button
-          className="button primary"
-          onClick={() => wallets[0] && dAppKit.connectWallet({ wallet: wallets[0] })}
-        >
-          Connect wallet
-        </button>
+      <section className="product-auth product-grid-paper">
+        <div className="product-auth-panel">
+          <span className="product-kicker product-kicker-badge">Web3 authentication</span>
+          <h2>Connect The Linked Wallet To Continue.</h2>
+          <p>This page is bound to <b>{expected.slice(0, 10)}…{expected.slice(-6)}</b>. Connect that exact wallet to inspect diagnosis details or continue protected actions.</p>
+          <div className="product-auth-actions">
+            <button
+              className="product-primary"
+              onClick={() => wallets[0] && dAppKit.connectWallet({ wallet: wallets[0] })}
+            >
+              Connect wallet
+            </button>
+          </div>
+        </div>
       </section>
     );
   }
@@ -37,20 +42,25 @@ export function WalletGate({
 
   if (connected !== target) {
     return (
-      <section className="panel" style={{ textAlign: "center", padding: 40 }}>
-        <h2>Wallet mismatch</h2>
-        <p>
-          Connected: <b>{account.address.slice(0, 10)}…{account.address.slice(-6)}</b>
-        </p>
-        <p>
-          Expected: <b>{expected.slice(0, 10)}…{expected.slice(-6)}</b>
-        </p>
-        <p style={{ color: "#777", marginTop: 12 }}>
-          Disconnect and reconnect with the correct wallet, or switch accounts in your wallet extension.
-        </p>
-        <button className="button" onClick={() => dAppKit.disconnectWallet()}>
-          Disconnect
-        </button>
+      <section className="product-auth product-grid-paper">
+        <div className="product-auth-panel mismatch">
+          <span className="product-kicker product-kicker-badge">Wallet mismatch</span>
+          <h2>Connected Wallet Does Not Match This Diagnosis Link.</h2>
+          <p>
+            Connected: <b>{account.address.slice(0, 10)}…{account.address.slice(-6)}</b>
+          </p>
+          <p>
+            Expected: <b>{expected.slice(0, 10)}…{expected.slice(-6)}</b>
+          </p>
+          <p>
+            Disconnect and reconnect with the correct wallet, or switch accounts in your wallet extension.
+          </p>
+          <div className="product-auth-actions">
+            <button className="product-outline" onClick={() => dAppKit.disconnectWallet()}>
+              Disconnect
+            </button>
+          </div>
+        </div>
       </section>
     );
   }

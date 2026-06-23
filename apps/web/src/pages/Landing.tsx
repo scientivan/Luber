@@ -174,7 +174,7 @@ export function Landing() {
       </section>
 
       <footer className="of-follow">
-        <div className="of-follow-inner"><div><p className="of-kicker">Ready when your agent is.</p><h2>Install. Diagnose. Review. Rebalance.</h2></div><div className="of-follow-actions"><LandingActionButton tone="dark" size="follow" onClick={() => nav("/docs#installation")}>Install MCP</LandingActionButton><button className="of-outline-button" type="button" onClick={() => nav("/atlas")}>Launch app <ArrowUpRight /></button></div></div>
+        <div className="of-follow-inner"><div><p className="of-kicker">Ready when your agent is.</p><h2>Install. Diagnose. Review. Rebalance.</h2></div><div className="of-follow-actions"><LandingActionButton tone="dark" size="follow" onClick={() => nav("/docs#installation")}>Install MCP</LandingActionButton><button className="of-outline-button" type="button" onClick={() => nav("/history")}>Launch app <ArrowUpRight /></button></div></div>
         <div className="of-footer-links"><span>Luber</span><Link to="/docs">Docs</Link><Link to="/docs#installation">MCP Installation</Link><Link to="/history">Diagnostic History</Link><Link to="/status">Network Status</Link></div>
       </footer>
     </main>

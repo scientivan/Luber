@@ -5,6 +5,7 @@ import type { SystemStatus } from "@luber/core";
 import { fetchSystemStatus } from "../lib/api.js";
 import { useRealtime } from "../lib/useRealtime.js";
 import { HoverGridBackground } from "../components/HoverGridBackground.js";
+import { AppHeader } from "../components/AppHeader.js";
 import "../styles/history.css";
 import "../styles/status.css";
 
@@ -45,20 +46,14 @@ export function StatusHub() {
 
   return (
     <main className="history-theme">
-      <header className="history-header">
-        <Link className="history-brand" to="/">
-          <img src="/luber-logo.webp" alt="Luber logo" />
-          <span>
-            <b>Luber</b>
-            <small>System Status</small>
-          </span>
-        </Link>
-        <div className="history-header-actions">
-          <Link className="history-back" to="/">
+      <AppHeader
+        subtitle="System Status"
+        right={
+          <Link to="/">
             <ArrowLeft size={15} /> Overview
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       <section className="history-hero" ref={heroRef} style={{ position: "relative" }}>
         <HoverGridBackground

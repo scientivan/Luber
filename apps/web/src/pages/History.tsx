@@ -5,6 +5,7 @@ import { useCurrentAccount, useDAppKit, useWallets } from "@mysten/dapp-kit-reac
 import { fetchHistory } from "../lib/api.js";
 import type { HistoryItem } from "@luber/core";
 import { HoverGridBackground } from "../components/HoverGridBackground.js";
+import { AppHeader } from "../components/AppHeader.js";
 import "../styles/history.css";
 
 const typeLabel: Record<HistoryItem["type"], string> = {
@@ -71,33 +72,25 @@ export function History() {
 
   return (
     <main className="history-theme">
-      <header className="history-header">
-        <Link className="history-brand" to="/">
-          <img src="/luber-logo.webp" alt="Luber logo" />
-          <span>
-            <b>Luber</b>
-            <small>Diagnostic History</small>
-          </span>
-        </Link>
-        <div className="history-header-actions">
-          {isWalletConnected ? (
-            <>
-              <div className="history-wallet-badge">
-                <span className="history-dot" aria-hidden="true" />
-                <span>Wallet</span>
-                <strong>{connectedShortAddress}</strong>
-              </div>
-              <button className="history-disconnect" type="button" onClick={() => disconnect()}>
-                Disconnect
-              </button>
-            </>
-          ) : (
-            <Link className="history-back" to="/">
-              <ArrowLeft size={15} /> Overview
-            </Link>
-          )}
-        </div>
-      </header>
+      <AppHeader
+        subtitle="Diagnostic History"
+        right={isWalletConnected ? (
+          <>
+            <div className="app-header-item app-wallet-badge">
+              <span className="app-wallet-dot" aria-hidden="true" />
+              <span>Wallet</span>
+              <strong>{connectedShortAddress}</strong>
+            </div>
+            <button className="app-header-button" type="button" onClick={() => disconnect()}>
+              Disconnect
+            </button>
+          </>
+        ) : (
+          <Link to="/">
+            <ArrowLeft size={15} /> Overview
+          </Link>
+        )}
+      />
 
       {!isWalletConnected ? (
         <section className="history-auth history-grid-paper">
@@ -186,7 +179,7 @@ export function History() {
                 <p>Run your first diagnosis from an MCP-compatible agent or start from Atlas.</p>
                 <div className="history-state-actions">
                   <Link className="history-outline" to="/docs#installation">Install MCP</Link>
-                  <Link className="history-outline dark" to="/atlas">Run Diagnosis</Link>
+                  <Link className="history-outline dark" to="/history">Run Diagnosis</Link>
                 </div>
               </div>
             ) : (

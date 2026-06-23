@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { HoverGridBackground } from "../components/HoverGridBackground";
+import { AppHeader } from "../components/AppHeader.js";
 import "../styles/docs.css";
 
 const requirements = [
@@ -275,24 +276,20 @@ export function Docs() {
 
   return (
     <main className="docs-theme">
-      <header className="docs-header">
-        <Link className="docs-brand" to="/">
-          <img src="/luber-logo.webp" alt="Luber logo" />
-          <span>
-            <b>Luber</b>
-            <small>Docs & Installation</small>
-          </span>
-        </Link>
-        <nav aria-label="Docs navigation">
-          <a href="#intro">Overview</a>
-          <a href="#installation">Install MCP</a>
-          <Link to="/history">History</Link>
-          <Link to="/status">Status</Link>
-          <Link to="/">
-            Launch App <ArrowUpRight aria-hidden="true" />
-          </Link>
-        </nav>
-      </header>
+      <AppHeader
+        subtitle="Docs & Installation"
+        right={
+          <nav className="app-header-nav" aria-label="Docs navigation">
+            <a href="#intro">Overview</a>
+            <a href="#installation">Install MCP</a>
+            <Link to="/history">History</Link>
+            <Link to="/status">Status</Link>
+            <Link to="/">
+              Launch App <ArrowUpRight aria-hidden="true" />
+            </Link>
+          </nav>
+        }
+      />
 
       <section className="docs-hero" id="intro" ref={heroRef} style={{ position: "relative", overflow: "hidden" }}>
         <HoverGridBackground

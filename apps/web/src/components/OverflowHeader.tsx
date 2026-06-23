@@ -50,7 +50,7 @@ export function OverflowHeader({
         <Link className="of-header-history" to="/history">
           Diagnostic History
         </Link>
-        <Link className="of-header-launch" to="/atlas">
+        <Link className="of-header-launch" to="/history">
           <span className="of-header-launch-icon" aria-hidden="true">
             <ArrowRight />
           </span>
@@ -82,7 +82,7 @@ export function OverflowHeader({
             </button>
           ))}
           <Link to="/history">History</Link>
-          <Link to="/atlas">Launch App</Link>
+          <Link to="/history">Launch App</Link>
         </div>
       )}
     </header>
