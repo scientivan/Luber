@@ -218,8 +218,9 @@
   border-bottom: var(--product-line);
 }
 
-.panel {
+.product-page .panel {
   background: var(--product-paper);
+  color: var(--product-ink);
   border: var(--product-line);
   box-shadow: 10px 10px 0 var(--product-ink);
   padding: 24px;
